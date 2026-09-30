@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 100" fill="none">
+  <defs>
+    <linearGradient id="impGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563EB" />
+      <stop offset="100%" stop-color="#1D4ED8" />
+    </linearGradient>
+  </defs>
+  <!-- Icon Mark: Modern overlapping paper / fast laser printing beam glyph -->
+  <g transform="translate(10, 10)">
+    <rect x="10" y="8" width="46" height="60" rx="8" fill="#DBEAFE" />
+    <rect x="22" y="16" width="46" height="60" rx="8" fill="url(#impGrad)" />
+    <!-- Dynamic laser / speed print slit -->
+    <path d="M30 38H56M30 46H52M30 54H44" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round"/>
+    <circle cx="58" cy="24" r="4.5" fill="#60A5FA" />
+  </g>
+  <!-- Brand Wordmark -->
+  <text x="100" y="58" font-family="'Plus Jakarta Sans', 'Inter', sans-serif" font-weight="800" font-size="38" letter-spacing="1.5" fill="#0F172A">IMPREVO</text>
+  <!-- Tagline -->
+  <text x="102" y="78" font-family="'Plus Jakarta Sans', 'Inter', sans-serif" font-weight="600" font-size="12.5" letter-spacing="2" fill="#2563EB">SMART PRINTING. SIMPLIFIED.</text>
+</svg>

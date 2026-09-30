@@ -1,0 +1,746 @@
+<!DOCTYPE html><html lang="en" style=""><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0" name="viewport"><meta content="web_dashboard" name="shell-type"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "surface-container-low": "#eff4ff",
+          "inverse-primary": "#b7c4ff",
+          "on-tertiary-container": "#76eab6",
+          "on-surface": "#0b1c30",
+          "surface-variant": "#d3e4fe",
+          "outline": "#747686",
+          "on-secondary-fixed-variant": "#3f465c",
+          "on-surface-variant": "#434655",
+          "secondary-fixed-dim": "#bec6e0",
+          "surface-container-highest": "#d3e4fe",
+          "tertiary-fixed": "#85f8c4",
+          "on-background": "#0b1c30",
+          "on-primary-container": "#cad3ff",
+          "surface": "#f8f9ff",
+          "error": "#ba1a1a",
+          "on-tertiary-fixed-variant": "#005137",
+          "tertiary-fixed-dim": "#68dba9",
+          "on-secondary": "#ffffff",
+          "error-container": "#ffdad6",
+          "outline-variant": "#c4c5d7",
+          "on-error": "#ffffff",
+          "on-tertiary": "#ffffff",
+          "surface-container": "#e5eeff",
+          "surface-container-high": "#dce9ff",
+          "surface-dim": "#cbdbf5",
+          "on-primary": "#ffffff",
+          "on-secondary-container": "#5c647a",
+          "surface-bright": "#f8f9ff",
+          "background": "#f8f9ff",
+          "surface-container-lowest": "#ffffff",
+          "on-primary-fixed-variant": "#0039b5",
+          "tertiary-container": "#006948",
+          "inverse-surface": "#213145",
+          "secondary-container": "#dae2fd",
+          "on-tertiary-fixed": "#002114",
+          "primary-fixed": "#dce1ff",
+          "on-secondary-fixed": "#131b2e",
+          "primary": "#0037b0",
+          "primary-container": "#1d4ed8",
+          "secondary-fixed": "#dae2fd",
+          "surface-tint": "#2151da",
+          "primary-fixed-dim": "#b7c4ff",
+          "on-error-container": "#93000a",
+          "tertiary": "#004f35",
+          "secondary": "#565e74",
+          "inverse-on-surface": "#eaf1ff",
+          "on-primary-fixed": "#001551"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.25rem",
+          "lg": "0.5rem",
+          "xl": "0.75rem",
+          "full": "9999px"
+        },
+        "spacing": {
+          "gutter-kiosk": "2rem",
+          "margin-kiosk": "3rem",
+          "space-xs": "0.5rem",
+          "space-xl": "3rem",
+          "margin": "2rem",
+          "space-md": "1.25rem",
+          "space-lg": "2rem",
+          "space-sm": "0.75rem",
+          "gutter": "1.5rem"
+        },
+        "fontFamily": {
+          "body-xl": [
+            "Inter"
+          ],
+          "headline-xl": [
+            "Plus Jakarta Sans"
+          ],
+          "body-lg": [
+            "Inter"
+          ],
+          "display-kiosk": [
+            "Plus Jakarta Sans"
+          ],
+          "price-display": [
+            "Plus Jakarta Sans"
+          ],
+          "body-md": [
+            "Inter"
+          ],
+          "headline-lg": [
+            "Plus Jakarta Sans"
+          ],
+          "label-lg": [
+            "Plus Jakarta Sans"
+          ],
+          "label-md": [
+            "Plus Jakarta Sans"
+          ],
+          "headline-md": [
+            "Plus Jakarta Sans"
+          ]
+        },
+        "fontSize": {
+          "body-xl": [
+            "20px",
+            {
+              "lineHeight": "28px",
+              "fontWeight": "500"
+            }
+          ],
+          "headline-xl": [
+            "36px",
+            {
+              "lineHeight": "44px",
+              "letterSpacing": "-0.01em",
+              "fontWeight": "700"
+            }
+          ],
+          "body-lg": [
+            "18px",
+            {
+              "lineHeight": "26px",
+              "fontWeight": "400"
+            }
+          ],
+          "display-kiosk": [
+            "48px",
+            {
+              "lineHeight": "56px",
+              "letterSpacing": "-0.02em",
+              "fontWeight": "700"
+            }
+          ],
+          "price-display": [
+            "40px",
+            {
+              "lineHeight": "48px",
+              "fontWeight": "800"
+            }
+          ],
+          "body-md": [
+            "16px",
+            {
+              "lineHeight": "24px",
+              "fontWeight": "400"
+            }
+          ],
+          "headline-lg": [
+            "28px",
+            {
+              "lineHeight": "36px",
+              "fontWeight": "600"
+            }
+          ],
+          "label-lg": [
+            "18px",
+            {
+              "lineHeight": "24px",
+              "letterSpacing": "0.01em",
+              "fontWeight": "600"
+            }
+          ],
+          "label-md": [
+            "15px",
+            {
+              "lineHeight": "20px",
+              "letterSpacing": "0.02em",
+              "fontWeight": "600"
+            }
+          ],
+          "headline-md": [
+            "22px",
+            {
+              "lineHeight": "28px",
+              "fontWeight": "600"
+            }
+          ]
+        }
+      },
+    },
+  }</script></head><body class="bg-surface font-body-md text-body-md text-on-surface"><aside class="fixed left-0 top-0 h-full w-72 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-50 flex flex-col justify-between py-6"><div class="flex flex-col"><div class="px-6 mb-8 flex items-center gap-3"><img alt="Brand logo. - Primary color: #1d4ed8 - Font: plusJakartaSans - Mode: light - Roundness: rounded-md" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1UrlV2qopmIhJDtLTLU0lGaIGDTCWGGgKwYMJNh2lqjoJySzyy1SExxGf4Qg_Z-5tcWKNSBgoZBYO5D9UnnA9QSFkvTolIITmD7UjVV93Y1P-wB9EhEcAC167P4piPFAbnCmoepIjS7V2cZ53MVVPS2gWycvgC324cb3xlb2_nigm_liU7z9PApAi8KB0Z4aX7ChAaps4dJjWMoZuM6s_CGbeGyuCRPH-014NV90YV-HVYIgcusDkBPRKJA"><div class="flex flex-col"><span class="font-headline-md text-headline-md text-primary tracking-tight font-bold leading-none">Imprevo</span><span class="font-label-md text-[11px] text-on-surface-variant font-medium tracking-wider uppercase mt-1">Shopkeeper v1.0</span></div></div><div class="px-4 mb-4"><div class="bg-surface-container-low rounded-xl p-3 flex items-center gap-3 shadow-xs"><div class="w-10 h-10 rounded-lg bg-secondary-container flex items-center justify-center text-primary font-bold font-headline-md text-headline-md shadow-sm">SG</div><div class="flex flex-col min-w-0 flex-1"><span class="font-label-md text-label-md text-on-surface font-semibold truncate leading-snug">Shree Ganesh Print</span><span class="font-body-md text-[13px] text-on-surface-variant truncate">Dev Sharma</span></div></div></div><div class="px-4 mb-4"><a class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-error hover:bg-error-container hover:text-on-error-container transition-all font-label-md text-label-md" data-path="login" href="#"><span class="material-symbols-outlined text-[20px]">logout</span><span class="">Logout Account</span></a></div><nav class="px-4 flex flex-col gap-1.5" data-active-classes="bg-primary-container text-on-primary font-label-lg text-label-lg shadow-sm"><a aria-current="page" class="flex items-center gap-3.5 px-4 py-3 rounded-lg transition-all bg-primary-container text-on-primary font-label-lg text-label-lg shadow-sm" data-path="dashboard" href="#"><span class="material-symbols-outlined text-[22px]">dashboard</span><span class="">Dashboard</span></a></nav></div></aside><div class="pl-72"><header class="fixed top-0 left-72 right-0 h-20 bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-8"><div class="flex items-center gap-4 min-w-0"><div class="flex flex-col min-w-0"><span class="font-headline-md text-headline-md text-on-surface font-bold tracking-tight">Good evening, Dev</span><span class="font-body-md text-body-md text-on-surface-variant truncate">Tuesday, Sep 22, 2026 • Terminal Zone A</span></div></div><div class="flex items-center gap-5"><button aria-label="Notifications" class="relative w-10 h-10 rounded-full bg-surface-container-lowest flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors shadow-[0_1px_4px_rgba(0,0,0,0.04)]"><span class="material-symbols-outlined text-[22px]">notifications</span><span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full ring-2 ring-surface"></span></button><div class="flex items-center gap-3 pl-2"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="relative w-full pt-20 bg-surface min-h-screen px-8 py-6"><div class="flex flex-col w-full gap-6 pb-12">
+<!-- Top System Diagnostics Banner & Quick Health Status -->
+<div class="w-full bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-2.5">
+<h1 class="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight leading-none">Dashboard</h1>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-surface-container-high text-primary font-label-md text-[11px] font-semibold uppercase tracking-wider">Terminal Node 01</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">
+        Overview of your shop's printing activity • Tuesday, September 22, 2026
+      </p>
+</div>
+<!-- Live Telemetry Capsule -->
+<div class="flex flex-wrap items-center gap-2 bg-surface-container-low px-3.5 py-2 rounded-lg">
+<div class="flex items-center gap-1.5 pr-2">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-tertiary-container opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-tertiary"></span>
+</span>
+<span class="font-label-md text-[12px] text-on-surface font-medium">API</span>
+<span class="font-label-md text-[11px] text-tertiary font-semibold">Online</span>
+</div>
+<span class="text-outline-variant text-[11px]">•</span>
+<div class="flex items-center gap-1.5 px-2">
+<span class="h-2 w-2 rounded-full bg-tertiary"></span>
+<span class="font-label-md text-[12px] text-on-surface font-medium">MySQL</span>
+<span class="font-label-md text-[11px] text-tertiary font-semibold">Sync</span>
+</div>
+<span class="text-outline-variant text-[11px]">•</span>
+<div class="flex items-center gap-1.5 px-2">
+<span class="h-2 w-2 rounded-full bg-tertiary"></span>
+<span class="font-label-md text-[12px] text-on-surface font-medium">Cloud R2</span>
+<span class="font-label-md text-[11px] text-tertiary font-semibold">Live</span>
+</div>
+<span class="text-outline-variant text-[11px]">•</span>
+<div class="flex items-center gap-2 pl-2 bg-surface-container-lowest px-2.5 py-1 rounded-md shadow-xs">
+<span class="material-symbols-outlined text-primary text-[18px]">print</span>
+<div class="flex flex-col leading-tight">
+<div class="flex items-center gap-1">
+<span class="font-label-md text-[12px] font-bold text-on-surface">Brother HL-L6400DW</span>
+<span class="h-1.5 w-1.5 rounded-full bg-tertiary"></span>
+</div>
+<span class="font-label-md text-[11px] text-on-surface-variant">92% Toner • 450/500 A4 Sheets</span>
+</div>
+</div>
+</div>
+</div>
+<!-- KPI Overview Strip: 4 High-Impact Metric Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 w-full">
+<!-- Metric 1: Today's Orders -->
+<div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden flex flex-col justify-between">
+<div class="absolute right-0 top-0 w-24 h-24 bg-primary/5 rounded-full blur-2xl -mr-6 -mt-6 pointer-events-none"></div>
+<div class="flex items-start justify-between">
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider font-semibold">Today's Orders</span>
+<div class="flex items-baseline gap-2 mt-2">
+<span class="font-headline-xl text-headline-xl font-bold text-on-surface tracking-tight">24</span>
+<span class="inline-flex items-center text-[13px] font-semibold text-tertiary">
+<span class="material-symbols-outlined text-[16px]">trending_up</span> +14%
+            </span>
+</div>
+</div>
+<div class="w-12 h-12 rounded-xl bg-primary-fixed flex items-center justify-center text-primary shadow-xs">
+<span class="material-symbols-outlined text-[26px]">receipt_long</span>
+</div>
+</div>
+
+</div>
+<!-- Metric 2: Today's Sales -->
+<div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden flex flex-col justify-between">
+<div class="absolute right-0 top-0 w-24 h-24 bg-tertiary/5 rounded-full blur-2xl -mr-6 -mt-6 pointer-events-none"></div>
+<div class="flex items-start justify-between">
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider font-semibold">Today's Sales</span>
+<div class="flex items-baseline gap-2 mt-2">
+<span class="font-headline-xl text-headline-xl font-bold text-on-surface tracking-tight">₹1,240</span>
+<span class="inline-flex items-center text-[13px] font-semibold text-tertiary">
+<span class="material-symbols-outlined text-[16px]">trending_up</span> +22%
+            </span>
+</div>
+</div>
+<div class="w-12 h-12 rounded-xl bg-tertiary-fixed flex items-center justify-center text-tertiary shadow-xs">
+<span class="material-symbols-outlined text-[26px]">currency_rupee</span>
+</div>
+</div>
+
+</div>
+<!-- Metric 3: Today's Printouts -->
+<div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden flex flex-col justify-between">
+<div class="absolute right-0 top-0 w-24 h-24 bg-secondary-container/30 rounded-full blur-2xl -mr-6 -mt-6 pointer-events-none"></div>
+<div class="flex items-start justify-between">
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider font-semibold">Today's Printouts</span>
+<div class="flex items-baseline gap-2 mt-2">
+<span class="font-headline-xl text-headline-xl font-bold text-on-surface tracking-tight">186</span>
+<span class="font-body-md text-[14px] text-on-surface-variant font-medium">Pages</span>
+</div>
+</div>
+<div class="w-12 h-12 rounded-xl bg-secondary-container flex items-center justify-center text-on-secondary-container shadow-xs">
+<span class="material-symbols-outlined text-[26px]">local_printshop</span>
+</div>
+</div>
+
+</div>
+<!-- Metric 4: Completed Orders -->
+<div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden flex flex-col justify-between">
+<div class="absolute right-0 top-0 w-24 h-24 bg-primary-container/5 rounded-full blur-2xl -mr-6 -mt-6 pointer-events-none"></div>
+<div class="flex items-start justify-between">
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider font-semibold">Completed Orders</span>
+<div class="flex items-baseline gap-2 mt-2">
+<span class="font-headline-xl text-headline-xl font-bold text-on-surface tracking-tight">21</span>
+<span class="font-body-md text-[14px] text-on-surface-variant font-medium">/ 24</span>
+</div>
+</div>
+<div class="w-12 h-12 rounded-xl bg-surface-container-high flex items-center justify-center text-primary font-bold shadow-xs">
+<span class="material-symbols-outlined text-[26px]">check_circle</span>
+</div>
+</div>
+
+</div>
+</div>
+<!-- Operational Core: 7-Col Sales Chart & 5-Col Breakdown + Quick Actions -->
+
+<!-- Bottom Section: Mandatory Today's Orders with 10 Items Pagination -->
+<div class="w-full bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col">
+<!-- Header with Search & Filter Tabs -->
+<div class="p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div class="flex flex-col">
+<div class="flex items-center gap-3">
+<h2 class="font-headline-md text-headline-md font-bold text-on-surface">Today's Orders</h2>
+<span class="px-2.5 py-0.5 rounded-full bg-primary-fixed text-primary font-label-md text-[12px] font-bold">24 Total</span>
+</div>
+<p class="font-body-md text-[13px] text-on-surface-variant mt-1">Showing 1–10 of 24 orders received today</p>
+</div>
+<!-- Controls: Filter Chips and Search -->
+<div class="flex flex-wrap items-center gap-3">
+<!-- Status Filters -->
+<div class="inline-flex p-1 bg-surface-container-low rounded-lg overflow-x-auto">
+<button class="px-3 py-1 rounded-md font-label-md text-[12px] bg-primary text-on-primary font-semibold shadow-xs">All (24)</button>
+<button class="px-3 py-1 rounded-md font-label-md text-[12px] text-on-surface-variant hover:text-on-surface transition-colors">Paid (24)</button>
+<button class="px-3 py-1 rounded-md font-label-md text-[12px] text-on-surface-variant hover:text-on-surface transition-colors">Printing (1)</button>
+<button class="px-3 py-1 rounded-md font-label-md text-[12px] text-on-surface-variant hover:text-on-surface transition-colors">Queued (2)</button>
+<button class="px-3 py-1 rounded-md font-label-md text-[12px] text-on-surface-variant hover:text-on-surface transition-colors">Completed (21)</button>
+</div>
+<!-- Search Bar -->
+<div class="relative min-w-[220px]">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">search</span>
+<input class="w-full pl-9 pr-4 py-2 bg-surface-container-low rounded-lg font-body-md text-[13px] text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none focus:ring-2 focus:ring-primary/30" placeholder="Search Order ID or file..." type="text">
+</div>
+</div>
+</div>
+<!-- Data Table -->
+<div class="w-full overflow-x-auto">
+<table class="w-full text-left text-on-surface">
+<thead>
+<tr class="bg-surface-container-low text-on-surface-variant font-label-md text-[12px] uppercase tracking-wider">
+<th class="py-3.5 px-6 font-semibold">Order ID</th>
+<th class="py-3.5 px-4 font-semibold">Document Name</th>
+<th class="py-3.5 px-4 font-semibold text-center">Pages</th>
+<th class="py-3.5 px-4 font-semibold text-right">Amount</th>
+<th class="py-3.5 px-4 font-semibold text-center">Payment Status</th>
+<th class="py-3.5 px-4 font-semibold text-center">Printing Status</th>
+<th class="py-3.5 px-4 font-semibold text-right">Time</th>
+<th class="py-3.5 px-6 font-semibold text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="font-body-md text-[14px]">
+<!-- Row 1 (#ORD-1024) -->
+<tr class="hover:bg-surface-container-low/60 transition-colors">
+<td class="py-3.5 px-6 font-label-md font-bold text-primary">#ORD-1024</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-primary text-[20px]">picture_as_pdf</span>
+<span class="font-medium text-on-surface">assignment.pdf</span>
+</div>
+</td>
+<td class="py-3.5 px-4 text-center font-semibold">12</td>
+<td class="py-3.5 px-4 text-right font-bold text-on-surface">₹24</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-md text-[12px] font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Paid
+              </span>
+</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary-fixed text-primary font-label-md text-[12px] font-bold animate-pulse">
+<span class="w-2 h-2 rounded-full bg-primary"></span> Printing (Tray 1)
+              </span>
+</td>
+<td class="py-3.5 px-4 text-right font-label-md text-[13px] text-on-surface-variant">09:42</td>
+<td class="py-3.5 px-6 text-right">
+<div class="inline-flex items-center gap-1.5">
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="View Details">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="Reprint">
+<span class="material-symbols-outlined text-[18px]">replay</span>
+</button>
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="Print Receipt">
+<span class="material-symbols-outlined text-[18px]">receipt</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 2 (#ORD-1023) -->
+<tr class="hover:bg-surface-container-low/60 transition-colors">
+<td class="py-3.5 px-6 font-label-md font-bold text-primary">#ORD-1023</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-primary text-[20px]">picture_as_pdf</span>
+<span class="font-medium text-on-surface">resume.pdf</span>
+</div>
+</td>
+<td class="py-3.5 px-4 text-center font-semibold">4</td>
+<td class="py-3.5 px-4 text-right font-bold text-on-surface">₹8</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-md text-[12px] font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Paid
+              </span>
+</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-md text-[12px] font-bold">
+                Queued #1
+              </span>
+</td>
+<td class="py-3.5 px-4 text-right font-label-md text-[13px] text-on-surface-variant">09:38</td>
+<td class="py-3.5 px-6 text-right">
+<div class="inline-flex items-center gap-1.5">
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="View Details">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="Reprint">
+<span class="material-symbols-outlined text-[18px]">replay</span>
+</button>
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="Print Receipt">
+<span class="material-symbols-outlined text-[18px]">receipt</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 3 (#ORD-1022) -->
+<tr class="hover:bg-surface-container-low/60 transition-colors">
+<td class="py-3.5 px-6 font-label-md font-bold text-primary">#ORD-1022</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-primary text-[20px]">picture_as_pdf</span>
+<span class="font-medium text-on-surface">notes.pdf</span>
+</div>
+</td>
+<td class="py-3.5 px-4 text-center font-semibold">8</td>
+<td class="py-3.5 px-4 text-right font-bold text-on-surface">₹16</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-md text-[12px] font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Paid
+              </span>
+</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-md text-[12px] font-bold">
+                Queued #2
+              </span>
+</td>
+<td class="py-3.5 px-4 text-right font-label-md text-[13px] text-on-surface-variant">09:31</td>
+<td class="py-3.5 px-6 text-right">
+<div class="inline-flex items-center gap-1.5">
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="View Details">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="Reprint">
+<span class="material-symbols-outlined text-[18px]">replay</span>
+</button>
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="Print Receipt">
+<span class="material-symbols-outlined text-[18px]">receipt</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 4 (#ORD-1021) -->
+<tr class="hover:bg-surface-container-low/60 transition-colors">
+<td class="py-3.5 px-6 font-label-md font-bold text-primary">#ORD-1021</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-primary text-[20px]">picture_as_pdf</span>
+<span class="font-medium text-on-surface">hall_ticket.pdf</span>
+</div>
+</td>
+<td class="py-3.5 px-4 text-center font-semibold">2</td>
+<td class="py-3.5 px-4 text-right font-bold text-on-surface">₹4</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-md text-[12px] font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Paid
+              </span>
+</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-container-high text-tertiary font-label-md text-[12px] font-bold">
+<span class="material-symbols-outlined text-[14px]">done_all</span> Completed
+              </span>
+</td>
+<td class="py-3.5 px-4 text-right font-label-md text-[13px] text-on-surface-variant">09:15</td>
+<td class="py-3.5 px-6 text-right">
+<div class="inline-flex items-center gap-1.5">
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="View Details">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="Reprint">
+<span class="material-symbols-outlined text-[18px]">replay</span>
+</button>
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="Print Receipt">
+<span class="material-symbols-outlined text-[18px]">receipt</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 5 (#ORD-1020) -->
+<tr class="hover:bg-surface-container-low/60 transition-colors">
+<td class="py-3.5 px-6 font-label-md font-bold text-primary">#ORD-1020</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-primary text-[20px]">picture_as_pdf</span>
+<span class="font-medium text-on-surface">project_report.pdf</span>
+</div>
+</td>
+<td class="py-3.5 px-4 text-center font-semibold">28</td>
+<td class="py-3.5 px-4 text-right font-bold text-on-surface">₹56</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-md text-[12px] font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Paid
+              </span>
+</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-container-high text-tertiary font-label-md text-[12px] font-bold">
+<span class="material-symbols-outlined text-[14px]">done_all</span> Completed
+              </span>
+</td>
+<td class="py-3.5 px-4 text-right font-label-md text-[13px] text-on-surface-variant">08:55</td>
+<td class="py-3.5 px-6 text-right">
+<div class="inline-flex items-center gap-1.5">
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="View Details">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="Reprint">
+<span class="material-symbols-outlined text-[18px]">replay</span>
+</button>
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="Print Receipt">
+<span class="material-symbols-outlined text-[18px]">receipt</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 6 (#ORD-1019) -->
+<tr class="hover:bg-surface-container-low/60 transition-colors">
+<td class="py-3.5 px-6 font-label-md font-bold text-primary">#ORD-1019</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-primary text-[20px]">picture_as_pdf</span>
+<span class="font-medium text-on-surface">aadhaar_scan.pdf</span>
+</div>
+</td>
+<td class="py-3.5 px-4 text-center font-semibold">2</td>
+<td class="py-3.5 px-4 text-right font-bold text-on-surface">₹4</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-md text-[12px] font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Paid
+              </span>
+</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-container-high text-tertiary font-label-md text-[12px] font-bold">
+<span class="material-symbols-outlined text-[14px]">done_all</span> Completed
+              </span>
+</td>
+<td class="py-3.5 px-4 text-right font-label-md text-[13px] text-on-surface-variant">08:42</td>
+<td class="py-3.5 px-6 text-right">
+<div class="inline-flex items-center gap-1.5">
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="View Details">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="Reprint">
+<span class="material-symbols-outlined text-[18px]">replay</span>
+</button>
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="Print Receipt">
+<span class="material-symbols-outlined text-[18px]">receipt</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 7 (#ORD-1018) -->
+<tr class="hover:bg-surface-container-low/60 transition-colors">
+<td class="py-3.5 px-6 font-label-md font-bold text-primary">#ORD-1018</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-primary text-[20px]">picture_as_pdf</span>
+<span class="font-medium text-on-surface">syllabus.pdf</span>
+</div>
+</td>
+<td class="py-3.5 px-4 text-center font-semibold">6</td>
+<td class="py-3.5 px-4 text-right font-bold text-on-surface">₹12</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-md text-[12px] font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Paid
+              </span>
+</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-container-high text-tertiary font-label-md text-[12px] font-bold">
+<span class="material-symbols-outlined text-[14px]">done_all</span> Completed
+              </span>
+</td>
+<td class="py-3.5 px-4 text-right font-label-md text-[13px] text-on-surface-variant">08:30</td>
+<td class="py-3.5 px-6 text-right">
+<div class="inline-flex items-center gap-1.5">
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="View Details">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="Reprint">
+<span class="material-symbols-outlined text-[18px]">replay</span>
+</button>
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="Print Receipt">
+<span class="material-symbols-outlined text-[18px]">receipt</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 8 (#ORD-1017) -->
+<tr class="hover:bg-surface-container-low/60 transition-colors">
+<td class="py-3.5 px-6 font-label-md font-bold text-primary">#ORD-1017</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-primary text-[20px]">picture_as_pdf</span>
+<span class="font-medium text-on-surface">gst_invoice.pdf</span>
+</div>
+</td>
+<td class="py-3.5 px-4 text-center font-semibold">3</td>
+<td class="py-3.5 px-4 text-right font-bold text-on-surface">₹6</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-md text-[12px] font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Paid
+              </span>
+</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-container-high text-tertiary font-label-md text-[12px] font-bold">
+<span class="material-symbols-outlined text-[14px]">done_all</span> Completed
+              </span>
+</td>
+<td class="py-3.5 px-4 text-right font-label-md text-[13px] text-on-surface-variant">08:14</td>
+<td class="py-3.5 px-6 text-right">
+<div class="inline-flex items-center gap-1.5">
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="View Details">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="Reprint">
+<span class="material-symbols-outlined text-[18px]">replay</span>
+</button>
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="Print Receipt">
+<span class="material-symbols-outlined text-[18px]">receipt</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 9 (#ORD-1016) -->
+<tr class="hover:bg-surface-container-low/60 transition-colors">
+<td class="py-3.5 px-6 font-label-md font-bold text-primary">#ORD-1016</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-primary text-[20px]">picture_as_pdf</span>
+<span class="font-medium text-on-surface">contract_deed.pdf</span>
+</div>
+</td>
+<td class="py-3.5 px-4 text-center font-semibold">14</td>
+<td class="py-3.5 px-4 text-right font-bold text-on-surface">₹28</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-md text-[12px] font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Paid
+              </span>
+</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-container-high text-tertiary font-label-md text-[12px] font-bold">
+<span class="material-symbols-outlined text-[14px]">done_all</span> Completed
+              </span>
+</td>
+<td class="py-3.5 px-4 text-right font-label-md text-[13px] text-on-surface-variant">07:58</td>
+<td class="py-3.5 px-6 text-right">
+<div class="inline-flex items-center gap-1.5">
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="View Details">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="Reprint">
+<span class="material-symbols-outlined text-[18px]">replay</span>
+</button>
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="Print Receipt">
+<span class="material-symbols-outlined text-[18px]">receipt</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 10 (#ORD-1015) -->
+<tr class="hover:bg-surface-container-low/60 transition-colors">
+<td class="py-3.5 px-6 font-label-md font-bold text-primary">#ORD-1015</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-primary text-[20px]">picture_as_pdf</span>
+<span class="font-medium text-on-surface">lab_manual.pdf</span>
+</div>
+</td>
+<td class="py-3.5 px-4 text-center font-semibold">10</td>
+<td class="py-3.5 px-4 text-right font-bold text-on-surface">₹20</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-md text-[12px] font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Paid
+              </span>
+</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-container-high text-tertiary font-label-md text-[12px] font-bold">
+<span class="material-symbols-outlined text-[14px]">done_all</span> Completed
+              </span>
+</td>
+<td class="py-3.5 px-4 text-right font-label-md text-[13px] text-on-surface-variant">07:45</td>
+<td class="py-3.5 px-6 text-right">
+<div class="inline-flex items-center gap-1.5">
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="View Details">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="Reprint">
+<span class="material-symbols-outlined text-[18px]">replay</span>
+</button>
+<button class="p-1.5 rounded-md hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors" title="Print Receipt">
+<span class="material-symbols-outlined text-[18px]">receipt</span>
+</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination Bar: Strictly 10 items per page with clear controls -->
+<div class="p-4 bg-surface-container-low/40 flex flex-col sm:flex-row items-center justify-between gap-4">
+<div class="flex items-center gap-2 font-body-md text-[13px] text-on-surface-variant">
+<span class="">Showing <strong class="text-on-surface font-bold">1–10</strong> of <strong class="text-on-surface font-bold">24</strong> orders</span>
+<span class="text-outline-variant">•</span>
+<span class="">Rows per page: <strong class="text-on-surface font-semibold">10</strong></span>
+</div>
+<!-- Pagination Navigation Buttons -->
+<div class="inline-flex items-center gap-1.5">
+<button class="flex items-center justify-center w-9 h-9 rounded-lg bg-surface-container-high text-on-surface-variant/40 cursor-not-allowed transition-colors" disabled="" title="Previous Page">
+<span class="material-symbols-outlined text-[20px]">chevron_left</span>
+</button>
+<!-- Page 1 (Active) -->
+<button class="w-9 h-9 rounded-lg bg-primary text-on-primary font-label-md text-[13px] font-bold shadow-xs">
+          1
+        </button>
+<!-- Page 2 -->
+<button class="w-9 h-9 rounded-lg bg-surface-container-lowest hover:bg-surface-container-high text-on-surface font-label-md text-[13px] font-semibold transition-colors shadow-xs">
+          2
+        </button>
+<!-- Page 3 -->
+<button class="w-9 h-9 rounded-lg bg-surface-container-lowest hover:bg-surface-container-high text-on-surface font-label-md text-[13px] font-semibold transition-colors shadow-xs">
+          3
+        </button>
+<!-- Next Button -->
+<button class="flex items-center justify-center w-9 h-9 rounded-lg bg-surface-container-lowest hover:bg-surface-container-high text-on-surface font-semibold transition-colors shadow-xs" title="Next Page">
+<span class="material-symbols-outlined text-[20px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</div></main></div>
+
+</body></html>

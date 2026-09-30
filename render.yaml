@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: imprevo-smart-kiosk
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DB_HOST
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_NAME
+        value: imprevo_db
+      - key: RAZORPAY_KEY_ID
+        value: rzp_test_TeVqnfeaUHrBLc
+      - key: RAZORPAY_KEY_SECRET
+        value: zCtswkoen6SNwN8A6z14s1yF
