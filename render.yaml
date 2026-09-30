@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
@@ -12,6 +12,8 @@ services:
         value: production
       - key: PORT
         value: 10000
+      - key: DATABASE_URL
+        sync: false
       - key: DB_HOST
         sync: false
       - key: DB_USER
@@ -23,4 +25,5 @@ services:
       - key: RAZORPAY_KEY_ID
         value: rzp_test_TeVqnfeaUHrBLc
       - key: RAZORPAY_KEY_SECRET
-        value: zCtswkoen6SNwN8A6z14s1yF
+        sync: false
+
