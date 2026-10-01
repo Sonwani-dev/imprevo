@@ -53,6 +53,19 @@ export async function initializeDatabase(): Promise<void> {
         status = VALUES(status);
     `);
 
+    // 3b. Seed default printer config for terminal #04
+    await connection.query(`
+      INSERT INTO printer_configs (
+        terminal_id, bw_printer_id, bw_printer_name, bw_connection_type, bw_device_uri, bw_status,
+        color_printer_id, color_printer_name, color_connection_type, color_device_uri, color_status,
+        use_same_printer_for_both
+      ) VALUES (
+        '#04', 'brother_hl_l6400dw', 'Canon LBP2900 (Laser)', 'usb', 'usb://Canon_LBP2900', 'ready',
+        'canon_ir_adv_c3530i', 'Canon LBP2900 (Laser)', 'usb', 'usb://Canon_LBP2900', 'ready',
+        TRUE
+      ) ON DUPLICATE KEY UPDATE bw_status = VALUES(bw_status), color_status = VALUES(color_status);
+    `);
+
     // 4. Seed default pricing rules
     await connection.query(`
       INSERT INTO pricing_rules (color_mode, rate_per_page, description)

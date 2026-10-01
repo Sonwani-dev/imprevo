@@ -26,6 +26,11 @@ const AppLayout: React.FC = () => {
     location.pathname.startsWith('/payment') ||
     location.pathname.startsWith('/printing');
 
+  const showFooter =
+    isKioskStepPage &&
+    !location.pathname.startsWith('/confirm') &&
+    !location.pathname.startsWith('/payment');
+
   return (
     <div className="min-h-screen bg-surface font-body-md text-on-surface flex flex-col justify-between">
       {isKioskStepPage && <Header />}
@@ -44,7 +49,7 @@ const AppLayout: React.FC = () => {
         </Routes>
       </main>
 
-      {isKioskStepPage && <Footer />}
+      {showFooter && <Footer />}
 
       {/* Global Modals */}
       <CallShopkeeperModal />

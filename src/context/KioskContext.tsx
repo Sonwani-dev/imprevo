@@ -61,6 +61,9 @@ export interface KioskContextType {
   // Print Configuration Options
   orientation: Orientation;
   setOrientation: (o: Orientation) => void;
+  contentRotation: number;
+  setContentRotation: (deg: number) => void;
+  rotateContent90: () => void;
   pageSelectionMode: PageSelectionMode;
   setPageSelectionMode: (m: PageSelectionMode) => void;
   customPageRange: string;
@@ -151,6 +154,11 @@ export const KioskProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   // Print Configuration States
   const [orientation, setOrientation] = useState<Orientation>('portrait');
+  const [contentRotation, setContentRotation] = useState<number>(0);
+
+  const rotateContent90 = useCallback(() => {
+    setContentRotation((prev) => (prev + 90) % 360);
+  }, []);
   const [pageSelectionMode, setPageSelectionMode] = useState<PageSelectionMode>('all');
   const [customPageRange, setCustomPageRange] = useState<string>('');
   const [colorMode, setColorMode] = useState<ColorMode>('bw');
@@ -311,13 +319,9 @@ export const KioskProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }
       setFileFormat(format);
 
-      // Default selections per requirements:
-      // - For PDF or any document default should be portrait, for images it should be landscape
-      if (isImage) {
-        setOrientation('landscape');
-      } else {
-        setOrientation('portrait');
-      }
+      // Default selections: All documents and photos default to portrait
+      setOrientation('portrait');
+      setContentRotation(0);
 
       // - Color will be B&W
       setColorMode('bw');
@@ -399,6 +403,7 @@ export const KioskProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setFileFormat('PDF Document');
     setCustomPageRange(`1-${pages}`);
     setOrientation('portrait');
+    setContentRotation(0);
     setColorMode('bw');
     setCopies(1);
     setIsDuplex(false);
@@ -454,6 +459,7 @@ export const KioskProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             paymentMethod: chosenMethod,
             paymentStatus: 'success',
             orientation,
+            rotation: contentRotation,
             pageRange: pageSelectionMode === 'all' ? 'all' : customPageRange,
           });
           await api.updatePayment(orderId, {
@@ -584,6 +590,9 @@ export const KioskProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         setTotalPages,
         orientation,
         setOrientation,
+        contentRotation,
+        setContentRotation,
+        rotateContent90,
         pageSelectionMode,
         setPageSelectionMode,
         customPageRange,

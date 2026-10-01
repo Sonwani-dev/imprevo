@@ -418,13 +418,46 @@ export const ConfirmPage: React.FC = () => {
                   </div>
                 )}
               </div>
+
+              {/* Direct In-Panel Pay & Proceed Action (Guaranteed visible in laptop & desktop mode) */}
+              <div className="pt-3 border-t border-surface-container-high flex flex-col gap-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] sm:text-xs font-bold text-on-surface-variant uppercase tracking-wider">
+                      Total Payable
+                    </span>
+                    <span className="text-xs text-on-surface-variant">
+                      {effectivePages} pgs × {copies} {copies === 1 ? 'copy' : 'copies'} @ ₹{ratePerPage}
+                    </span>
+                  </div>
+                  <span className="text-2xl font-black text-primary font-mono tracking-tight">
+                    ₹{totalPrice}.00
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  id="confirm-panel-proceed-btn"
+                  onClick={handleProceed}
+                  className="w-full h-12 sm:h-13 rounded-xl sm:rounded-2xl bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25 active:scale-95 transition-all cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[20px]">lock</span>
+                  <span>Proceed to Pay ₹{totalPrice}.00</span>
+                  <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+                </button>
+
+                <div className="flex items-center justify-center gap-1.5 text-[11px] text-on-surface-variant">
+                  <span className="material-symbols-outlined text-[14px] text-emerald-600">verified</span>
+                  <span>Direct-to-Printer Spooling • Canon LBP2900</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* STICKY BOTTOM ACTION & PRICE BAR (Always fully visible together on screen) */}
-      <div className="fixed bottom-0 inset-x-0 z-40 bg-surface-container-lowest border-t border-surface-container-high shadow-lg px-3 sm:px-6 py-2.5 sm:py-3">
+      {/* STICKY BOTTOM ACTION & PRICE BAR (Always fully visible on all screen sizes, z-50 above everything) */}
+      <div className="fixed bottom-0 inset-x-0 z-50 bg-surface-container-lowest border-t border-surface-container-high shadow-2xl px-3 sm:px-6 py-2.5 sm:py-3">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
           {/* Price Breakdown */}
           <div className="flex flex-col text-left">
@@ -444,10 +477,12 @@ export const ConfirmPage: React.FC = () => {
           {/* Primary Action Button */}
           <button
             type="button"
+            id="confirm-bottom-proceed-btn"
             onClick={handleProceed}
-            className="h-12 sm:h-13 px-5 sm:px-8 rounded-xl sm:rounded-2xl bg-primary hover:bg-primary/90 text-on-primary font-bold text-sm sm:text-base flex items-center gap-2 shadow-md shadow-primary/25 active:scale-95 transition-all cursor-pointer"
+            className="h-12 sm:h-13 px-5 sm:px-8 rounded-xl sm:rounded-2xl bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 text-white font-bold text-sm sm:text-base flex items-center gap-2 shadow-lg shadow-blue-500/25 active:scale-95 transition-all cursor-pointer"
           >
-            <span>Proceed to Pay</span>
+            <span className="material-symbols-outlined text-[18px]">lock</span>
+            <span>Proceed to Pay ₹{totalPrice}.00</span>
             <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
           </button>
         </div>

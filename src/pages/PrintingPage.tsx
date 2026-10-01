@@ -35,6 +35,7 @@ export const PrintingPage: React.FC = () => {
   // Poll backend for real-time printer connection & page progress
   useEffect(() => {
     let isMounted = true;
+    let syncAttempts = 0;
 
     const pollStatus = async () => {
       if (!orderId) return;
@@ -72,6 +73,25 @@ export const PrintingPage: React.FC = () => {
         }
       } catch (err) {
         console.warn('Real-time printer poll warning:', err);
+        // Self-heal: If order was initiated while backend was starting, re-sync order to trigger printer dispatch
+        syncAttempts++;
+        if (syncAttempts <= 2 && orderId) {
+          try {
+            await api.createOrder({
+              id: orderId,
+              fileName,
+              totalPages: initialTargetPages,
+              docPages,
+              colorMode,
+              orientation,
+              copies,
+              isDuplex,
+              totalPrice,
+              paymentStatus: 'success',
+              pageRange: pageSelectionMode === 'all' ? 'all' : (selectedPagesList?.join(',') || 'all'),
+            });
+          } catch {}
+        }
       }
     };
 
@@ -282,7 +302,7 @@ export const PrintingPage: React.FC = () => {
             <div className="flex items-center justify-between text-xs text-on-surface-variant">
               <span>
                 {livePrintStatus === 'queued'
-                  ? 'Checking CUPS print spooler...'
+                  ? 'Connecting to printer spooler...'
                   : livePrintStatus === 'completed'
                   ? `${targetPages} of ${targetPages} pages completed`
                   : `${Math.max(0, liveCurrentPage - 1)} pages printed`}

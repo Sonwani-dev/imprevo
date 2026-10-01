@@ -1,0 +1,3 @@
+@echo off
+echo Starting MySQL Server...
+"C:\Users\win\mysql\bin\mysqld.exe" --defaults-file="C:\Users\win\mysql\my.ini" --console

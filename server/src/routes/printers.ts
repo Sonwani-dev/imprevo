@@ -28,6 +28,37 @@ export interface DiscoveredPrinter {
 async function discoverSystemPrinters(): Promise<DiscoveredPrinter[]> {
   const discovered: DiscoveredPrinter[] = [];
 
+  if (process.platform === 'win32') {
+    try {
+      const { stdout } = await execAsync('powershell -Command "Get-CimInstance Win32_Printer | Select-Object Name, DeviceID, Default | ConvertTo-Json -Compress"');
+      if (stdout && stdout.trim()) {
+        const raw = JSON.parse(stdout.trim());
+        const list = Array.isArray(raw) ? raw : [raw];
+        for (const item of list) {
+          const name = item.Name || item.DeviceID || 'Printer';
+          const lower = name.toLowerCase();
+          const isColor = lower.includes('color') || lower.includes('clx') || lower.includes('cmyk') || lower.includes('ecotank') || lower.includes('pixma') || lower.includes('deskjet');
+          discovered.push({
+            id: `win_${name.replace(/[^a-zA-Z0-9_]/g, '_')}`,
+            name,
+            displayName: name,
+            connectionType: 'usb',
+            uri: `windows://${encodeURIComponent(name)}`,
+            status: 'ready',
+            isDefault: Boolean(item.Default),
+            isRealSystemPrinter: true,
+            recommendedFor: isColor ? 'color' : 'bw',
+            colorSupport: isColor,
+            description: `Windows System Printer • ${name}`,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Windows printer query notice:', e);
+    }
+    return discovered;
+  }
+
   try {
     // 1. Get list of destinations via lpstat -e
     const { stdout: destOutput } = await execAsync('lpstat -e 2>/dev/null || true');
@@ -321,84 +352,95 @@ router.post('/test-page', async (req: Request, res: Response) => {
   try {
     const { printerType = 'bw', printerName, printerQueue } = req.body;
 
-    // 1. Discover all available CUPS destinations
-    const { stdout: destOutput } = await execAsync('lpstat -e 2>/dev/null || true');
-    const availableQueues = destOutput
-      .split('\n')
-      .map((d) => d.trim())
-      .filter((d) => d.length > 0 && !d.includes('No destinations'));
-
-    // 2. Discover default destination
-    const { stdout: defaultOutput } = await execAsync('lpstat -d 2>/dev/null || true');
-    const defaultMatch = defaultOutput.match(/system default destination:\s*([^\s\n]+)/i);
-    const systemDefaultQueue = defaultMatch ? defaultMatch[1].trim() : (availableQueues[0] || '');
-
-    // 3. Retrieve database configured printers
+    // 1. Retrieve database configured printers
     const [configRows]: any = await pool.query(
       `SELECT bw_printer_name, color_printer_name FROM printer_configs WHERE terminal_id = '#04' LIMIT 1`
     );
     const config = configRows?.[0] || {};
 
-    // 4. Resolve the exact CUPS queue name
     let targetQueue = '';
 
-    // Direct queue parameter provided
-    if (printerQueue && availableQueues.includes(printerQueue)) {
-      targetQueue = printerQueue;
-    }
+    if (process.platform === 'win32') {
+      let winPrinters: string[] = [];
+      try {
+        const { stdout } = await execAsync('powershell -Command "Get-CimInstance Win32_Printer | Select-Object -ExpandProperty Name"');
+        winPrinters = stdout.split('\n').map((s) => s.trim()).filter(Boolean);
+      } catch {}
 
-    // Printer name provided
-    if (!targetQueue && printerName) {
-      const cleanName = printerName.trim();
-      const underscored = cleanName.replace(/\s+/g, '_');
+      const cleanName = (printerName || printerQueue || (printerType === 'color' ? config.color_printer_name : config.bw_printer_name) || '').trim().replace(/\s*\([^)]*\)/g, '');
 
-      // Exact match
-      if (availableQueues.includes(cleanName)) {
-        targetQueue = cleanName;
-      } else if (availableQueues.includes(underscored)) {
-        targetQueue = underscored;
+      if (winPrinters.length > 0) {
+        const match = winPrinters.find(
+          (p) =>
+            p.toLowerCase() === cleanName.toLowerCase() ||
+            p.toLowerCase().includes(cleanName.toLowerCase()) ||
+            cleanName.toLowerCase().includes(p.toLowerCase())
+        );
+        targetQueue = match || winPrinters.find((p) => p.toLowerCase().includes('canon') || p.toLowerCase().includes('laser')) || winPrinters[0];
       } else {
-        // Fuzzy match against available queues
-        const match = availableQueues.find(
-          (q) =>
-            q.toLowerCase() === cleanName.toLowerCase() ||
-            q.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanName.toLowerCase().replace(/[^a-z0-9]/g, '') ||
-            cleanName.toLowerCase().includes(q.toLowerCase())
-        );
-        if (match) targetQueue = match;
+        targetQueue = cleanName || 'Canon LBP2900';
       }
-    }
+    } else {
+      // Discover all available CUPS destinations on Linux
+      const { stdout: destOutput } = await execAsync('lpstat -e 2>/dev/null || true');
+      const availableQueues = destOutput
+        .split('\n')
+        .map((d) => d.trim())
+        .filter((d) => d.length > 0 && !d.includes('No destinations'));
 
-    // If still not resolved, check saved config
-    if (!targetQueue) {
-      const configuredName = printerType === 'color' ? config.color_printer_name : config.bw_printer_name;
-      if (configuredName) {
-        const cleanConf = configuredName.trim().replace(/\s+/g, '_');
-        const match = availableQueues.find(
-          (q) =>
-            q === configuredName ||
-            q === cleanConf ||
-            q.toLowerCase().replace(/[^a-z0-9]/g, '') === configuredName.toLowerCase().replace(/[^a-z0-9]/g, '')
-        );
-        if (match) targetQueue = match;
+      const { stdout: defaultOutput } = await execAsync('lpstat -d 2>/dev/null || true');
+      const defaultMatch = defaultOutput.match(/system default destination:\s*([^\s\n]+)/i);
+      const systemDefaultQueue = defaultMatch ? defaultMatch[1].trim() : (availableQueues[0] || '');
+
+      if (printerQueue && availableQueues.includes(printerQueue)) {
+        targetQueue = printerQueue;
       }
-    }
 
-    // Ultimate fallback to system default or first available queue
-    if (!targetQueue) {
-      if (availableQueues.length > 0) {
+      if (!targetQueue && printerName) {
+        const cleanName = printerName.trim();
+        const underscored = cleanName.replace(/\s+/g, '_');
+        if (availableQueues.includes(cleanName)) {
+          targetQueue = cleanName;
+        } else if (availableQueues.includes(underscored)) {
+          targetQueue = underscored;
+        } else {
+          const match = availableQueues.find(
+            (q) =>
+              q.toLowerCase() === cleanName.toLowerCase() ||
+              q.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanName.toLowerCase().replace(/[^a-z0-9]/g, '') ||
+              cleanName.toLowerCase().includes(q.toLowerCase())
+          );
+          if (match) targetQueue = match;
+        }
+      }
+
+      if (!targetQueue) {
+        const configuredName = printerType === 'color' ? config.color_printer_name : config.bw_printer_name;
+        if (configuredName) {
+          const cleanConf = configuredName.trim().replace(/\s+/g, '_');
+          const match = availableQueues.find(
+            (q) =>
+              q === configuredName ||
+              q === cleanConf ||
+              q.toLowerCase().replace(/[^a-z0-9]/g, '') === configuredName.toLowerCase().replace(/[^a-z0-9]/g, '')
+          );
+          if (match) targetQueue = match;
+        }
+      }
+
+      if (!targetQueue && availableQueues.length > 0) {
         targetQueue = systemDefaultQueue || availableQueues[0];
       }
+
+      if (!targetQueue) {
+        return res.status(404).json({
+          success: false,
+          error: 'No active printers found in CUPS subsystem. Please connect a printer and scan again.',
+        });
+      }
     }
 
-    if (!targetQueue) {
-      return res.status(404).json({
-        success: false,
-        error: 'No active printers found in CUPS subsystem. Please connect a printer and scan again.',
-      });
-    }
-
-    // 5. Generate a formatted test print payload
+    // 2. Generate a formatted test print payload
     const isColor = printerType === 'color' || targetQueue.toLowerCase().includes('color');
     const timestamp = new Date().toLocaleString();
     const testContent = 
@@ -412,7 +454,7 @@ Dispatched At    : ${timestamp}
 Resolution       : 600 DPI High-Precision Output
 Paper Standard   : ISO A4 (210 x 297 mm)
 Hardware Status  : ONLINE & FUNCTIONAL
-CUPS Subsystem   : Linux Native Spooler Verified
+Spooler Platform : ${process.platform === 'win32' ? 'Windows Print Spooler' : 'CUPS Subsystem'}
 ----------------------------------------------------------------
 [ALIGNMENT GRID TARGET]
 +--------------------------------------------------------------+
@@ -427,32 +469,50 @@ Imprevo Kiosk Engine v2.4 • Zero Simulation • Genuine Print Job
 ================================================================
 `;
 
-    // Write temporary test file to ensure lp receives valid stream
+    // Write temporary test file
     const uploadsDir = path.resolve(process.cwd(), 'uploads');
     if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
     const testFilePath = path.join(uploadsDir, `test_page_${Date.now()}.txt`);
     fs.writeFileSync(testFilePath, testContent, 'utf8');
 
-    // 6. Execute lp command with proper preferences
     let jobId: string | null = null;
     let rawOutput = '';
-    const colorOpt = isColor ? '-o ColorModel=CMYK' : '-o ColorModel=Gray';
-    const lpCommand = `lp -d "${targetQueue}" ${colorOpt} -o media=A4 -o fit-to-page "${testFilePath}"`;
 
-    try {
-      const { stdout } = await execAsync(lpCommand);
-      rawOutput = stdout.trim();
-      const match = rawOutput.match(/request id is ([^\s]+)/i);
-      if (match) jobId = match[1];
-    } catch (printErr: any) {
-      console.error(`[CUPS Print Test Error] Command '${lpCommand}' failed:`, printErr.message || printErr);
-      // Clean up temp file
-      try { fs.unlinkSync(testFilePath); } catch {}
-      return res.status(500).json({
-        success: false,
-        error: `Failed to print to ${targetQueue}: ${printErr.message || 'CUPS error'}`,
-        targetQueue,
-      });
+    if (process.platform === 'win32') {
+      try {
+        const safePath = testFilePath.replace(/'/g, "''");
+        const safePrinter = targetQueue.replace(/'/g, "''");
+        await execAsync(`powershell -Command "Get-Content -LiteralPath '${safePath}' | Out-Printer -Name '${safePrinter}'"`);
+        rawOutput = `Windows Spooler test job sent to ${targetQueue}`;
+        jobId = `win_${Date.now()}`;
+      } catch (winErr: any) {
+        console.error(`[Windows Print Test Error] failed:`, winErr.message || winErr);
+        try { fs.unlinkSync(testFilePath); } catch {}
+        return res.status(500).json({
+          success: false,
+          error: `Failed to print to ${targetQueue}: ${winErr.message || 'Windows Spooler error'}`,
+          targetQueue,
+        });
+      }
+    } else {
+      // Execute lp command with proper preferences
+      const colorOpt = isColor ? '-o ColorModel=CMYK' : '-o ColorModel=Gray';
+      const lpCommand = `lp -d "${targetQueue}" ${colorOpt} -o media=A4 -o fit-to-page "${testFilePath}"`;
+
+      try {
+        const { stdout } = await execAsync(lpCommand);
+        rawOutput = stdout.trim();
+        const match = rawOutput.match(/request id is ([^\s]+)/i);
+        if (match) jobId = match[1];
+      } catch (printErr: any) {
+        console.error(`[CUPS Print Test Error] Command '${lpCommand}' failed:`, printErr.message || printErr);
+        try { fs.unlinkSync(testFilePath); } catch {}
+        return res.status(500).json({
+          success: false,
+          error: `Failed to print to ${targetQueue}: ${printErr.message || 'CUPS error'}`,
+          targetQueue,
+        });
+      }
     }
 
     // Clean up temp file after short delay

@@ -52,6 +52,7 @@ export interface CreateOrderPayload {
   paymentStatus?: 'idle' | 'processing' | 'success' | 'failed';
   payment_status?: 'idle' | 'processing' | 'success' | 'failed';
   orientation?: 'portrait' | 'landscape';
+  rotation?: number;
   pageRange?: string;
   page_range?: string;
 }
@@ -65,6 +66,7 @@ export interface OrderData {
   doc_pages?: number;
   total_pages: number;
   orientation?: 'portrait' | 'landscape';
+  rotation?: number;
   page_range?: string;
   color_mode: 'bw' | 'color';
   copies: number;

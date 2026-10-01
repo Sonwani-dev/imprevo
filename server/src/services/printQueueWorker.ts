@@ -4,6 +4,14 @@ import fs from 'fs';
 import path from 'path';
 import pool from '../db/connection.js';
 import type { RowDataPacket } from 'mysql2';
+import { createRequire } from 'module';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const require = createRequire(import.meta.url);
+const ptp = require('pdf-to-printer');
 
 const execAsync = promisify(exec);
 
@@ -11,26 +19,55 @@ let isWorkerRunning = false;
 let isProcessingTick = false;
 
 /**
- * Discovers available CUPS queues on this Linux system
+ * Discovers available printer queues on Windows or Linux
  */
-async function getAvailableCupsQueues(): Promise<string[]> {
+async function getAvailablePrinters(): Promise<string[]> {
+  if (process.platform === 'win32') {
+    try {
+      const printers = await ptp.getPrinters();
+      const names = printers.map((p: any) => p.name).filter(Boolean);
+      if (names.length > 0) return names;
+    } catch {}
+
+    try {
+      const { stdout } = await execAsync('powershell -Command "Get-CimInstance Win32_Printer | Select-Object -ExpandProperty Name"');
+      return stdout.split('\n').map((s) => s.trim()).filter((s) => s.length > 0);
+    } catch {
+      return [];
+    }
+  }
+
+  // Linux CUPS
   try {
-    const { stdout } = await execAsync('lpstat -e');
+    const { stdout } = await execAsync('lpstat -e 2>/dev/null || true');
     return stdout
       .split('\n')
       .map((s) => s.trim())
-      .filter((s) => s.length > 0);
+      .filter((s) => s.length > 0 && !s.includes('No destinations'));
   } catch {
     return [];
   }
 }
 
 /**
- * Checks whether a specific CUPS queue or system has an active job printing
+ * Checks whether a specific printer or system has an active job printing
  */
-async function isPrinterBusy(queueName: string): Promise<boolean> {
+async function isPrinterBusy(printerName: string): Promise<boolean> {
+  if (process.platform === 'win32') {
+    try {
+      const safeName = printerName.replace(/'/g, "''");
+      const { stdout } = await execAsync(
+        `powershell -Command "Get-PrintJob -PrinterName '${safeName}' -ErrorAction SilentlyContinue | Measure-Object | Select-Object -ExpandProperty Count"`
+      );
+      const count = parseInt(stdout.trim(), 10);
+      return !isNaN(count) && count > 0;
+    } catch {
+      return false;
+    }
+  }
+
   try {
-    const { stdout } = await execAsync(`lpstat -o "${queueName}"`);
+    const { stdout } = await execAsync(`lpstat -o "${printerName}" 2>/dev/null || true`);
     return stdout.trim().length > 0;
   } catch {
     return false;
@@ -133,50 +170,67 @@ export async function processPrintQueueTick(): Promise<void> {
 
       // Determine target printer based on user's color_mode preference
       const isColor = order.color_mode === 'color';
-      let targetName = isColor
-        ? (config.color_printer_name || 'Virtual_Color_Laser')
-        : (config.bw_printer_name || 'Virtual_BW_Laser');
+      let targetName = (isColor
+        ? (config.color_printer_name || '')
+        : (config.bw_printer_name || '')).trim();
 
-      // Resolve against available CUPS destinations on the Linux system
-      const availableQueues = await getAvailableCupsQueues();
-      let selectedQueue = targetName.trim().replace(/\s+/g, '_');
+      // Resolve against available printers on Windows or Linux
+      const availablePrinters = await getAvailablePrinters();
+      let selectedPrinter = '';
 
-      // Check if the selected queue exists in CUPS; if not, fuzzy match or fallback
-      if (!availableQueues.includes(selectedQueue)) {
-        const fuzzy = availableQueues.find(
-          (q) =>
-            q.toLowerCase() === targetName.toLowerCase() ||
-            q.toLowerCase().replace(/[^a-z0-9]/g, '') === targetName.toLowerCase().replace(/[^a-z0-9]/g, '') ||
-            targetName.toLowerCase().includes(q.toLowerCase())
+      // Strip extra descriptors like "(Laser)", "(B&W Laser)", etc.
+      const cleanTarget = targetName.replace(/\s*\([^)]*\)/g, '').trim();
+
+      if (availablePrinters.length > 0) {
+        // 1. Exact match
+        const exactMatch = availablePrinters.find(
+          (p) => p.toLowerCase() === targetName.toLowerCase() || p.toLowerCase() === cleanTarget.toLowerCase()
         );
-        if (fuzzy) {
-          selectedQueue = fuzzy;
-        } else if (isColor && availableQueues.find((q) => q.toLowerCase().includes('color'))) {
-          selectedQueue = availableQueues.find((q) => q.toLowerCase().includes('color'))!;
-        } else if (!isColor && availableQueues.find((q) => q.toLowerCase().includes('bw') || !q.toLowerCase().includes('color'))) {
-          selectedQueue = availableQueues.find((q) => q.toLowerCase().includes('bw') || !q.toLowerCase().includes('color'))!;
-        } else if (availableQueues.length > 0) {
-          selectedQueue = availableQueues[0];
+        if (exactMatch) {
+          selectedPrinter = exactMatch;
+        } else {
+          // 2. Fuzzy match
+          const fuzzy = availablePrinters.find(
+            (p) =>
+              p.toLowerCase().includes(cleanTarget.toLowerCase()) ||
+              cleanTarget.toLowerCase().includes(p.toLowerCase()) ||
+              p.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanTarget.toLowerCase().replace(/[^a-z0-9]/g, '')
+          );
+          if (fuzzy) {
+            selectedPrinter = fuzzy;
+          } else if (process.platform === 'win32') {
+            try {
+              const def = await ptp.getDefaultPrinter();
+              if (def && def.name) selectedPrinter = def.name;
+            } catch {}
+          }
         }
+
+        // Final fallback among available printers
+        if (!selectedPrinter) {
+          selectedPrinter = availablePrinters[0];
+        }
+      } else {
+        selectedPrinter = cleanTarget || (isColor ? 'Color_Printer' : 'BW_Printer');
       }
 
-      // Check whether this printer is currently busy / has a queued job blocking it
-      const busyInCups = await isPrinterBusy(selectedQueue);
+      // Check whether this printer is currently busy
+      const busyInSpooler = await isPrinterBusy(selectedPrinter);
       const [busyInDb] = await pool.query<RowDataPacket[]>(
         `SELECT id FROM orders WHERE print_status = 'printing' AND color_mode = ? AND id != ?`,
         [order.color_mode, order.id]
       );
 
-      if (busyInCups || busyInDb.length > 0) {
-        console.log(`[PrintWorker] Target printer "${selectedQueue}" is currently busy (CUPS: ${busyInCups}, Active DB Job: ${busyInDb.length > 0 ? busyInDb[0].id : 'none'}). Holding Order ${order.id} in queue.`);
+      if (busyInSpooler || busyInDb.length > 0) {
+        console.log(`[PrintWorker] Target printer "${selectedPrinter}" is currently busy (Spooler: ${busyInSpooler}, Active DB Job: ${busyInDb.length > 0 ? busyInDb[0].id : 'none'}). Holding Order ${order.id} in queue.`);
         return;
       }
 
-      // Printer is ready! Shift order to 'printing' and construct the print command
+      // Printer is ready! Shift order to 'printing' and dispatch
       const totalPages = Math.max(1, Number(order.total_pages) || 1);
       const initialProgress = Math.min(80, Math.round((1 / totalPages) * 100));
 
-      console.log(`[PrintWorker] Dispatching Order ${order.id} to "${selectedQueue}" (Preferences: ${order.color_mode}, ${order.orientation}, ${order.copies} copies, Duplex: ${order.is_duplex}, Pages: ${order.page_range || 'all'}, Res: 600dpi)...`);
+      console.log(`[PrintWorker] Dispatching Order ${order.id} to "${selectedPrinter}" (Preferences: ${order.color_mode}, ${order.orientation}, ${order.copies} copies, Duplex: ${order.is_duplex}, Pages: ${order.page_range || 'all'}, Res: 600dpi)...`);
 
       await pool.query(
         `UPDATE orders 
@@ -185,13 +239,12 @@ export async function processPrintQueueTick(): Promise<void> {
              print_progress = ?,
              printer_name = ?
          WHERE id = ?`,
-        [initialProgress, selectedQueue, order.id]
+        [initialProgress, selectedPrinter, order.id]
       );
 
       // Determine physical file to print
       let targetFilePath = order.doc_file_path;
       if (!targetFilePath || !fs.existsSync(targetFilePath)) {
-        // Query database documents table for latest matching document
         try {
           const [docRows] = await pool.query<RowDataPacket[]>(
             `SELECT file_path FROM documents WHERE order_id = ? OR original_name = ? ORDER BY id DESC LIMIT 1`,
@@ -205,60 +258,110 @@ export async function processPrintQueueTick(): Promise<void> {
 
       if (!targetFilePath || !fs.existsSync(targetFilePath)) {
         const uploadsDir = path.resolve(process.cwd(), 'uploads');
-        if (fs.existsSync(uploadsDir)) {
-          const files = fs.readdirSync(uploadsDir);
-          const found = files.find((f) => f.includes(order.file_name) || (order.file_name && f.endsWith(path.extname(order.file_name))));
-          if (found) {
-            targetFilePath = path.join(uploadsDir, found);
+        if (fs.existsSync(uploadsDir) && order.file_name) {
+          const directMatch = path.join(uploadsDir, order.file_name);
+          if (fs.existsSync(directMatch)) {
+            targetFilePath = directMatch;
+          } else {
+            const files = fs.readdirSync(uploadsDir);
+            const baseWithoutExt = path.parse(order.file_name).name.toLowerCase();
+            const found = files.find((f) =>
+              f.toLowerCase().includes(order.file_name.toLowerCase()) ||
+              (baseWithoutExt.length > 3 && f.toLowerCase().includes(baseWithoutExt))
+            );
+            if (found) {
+              targetFilePath = path.join(uploadsDir, found);
+            }
           }
         }
       }
 
-      // If no file exists, create a clean diagnostic job payload
-      let isTempFile = false;
       if (!targetFilePath || !fs.existsSync(targetFilePath)) {
-        targetFilePath = path.resolve(process.cwd(), `uploads/temp_${order.id.replace('#', '')}.txt`);
-        const content = `IMPREVO SMART PRINTING KIOSK\nOrder: ${order.id}\nFile: ${order.file_name}\nMode: ${order.color_mode.toUpperCase()}\nCopies: ${order.copies}\nPages: ${order.total_pages}\nTimestamp: ${new Date().toISOString()}\n`;
-        fs.writeFileSync(targetFilePath, content, 'utf8');
-        isTempFile = true;
+        console.warn(`[PrintWorker] No physical file found on disk for order ${order.id} (${order.file_name}). Skipping physical hardware dispatch.`);
+        return;
       }
 
-      // Assemble all print preference options
-      // 1. Color Model: CMYK for color, Gray for B&W
-      const colorOption = isColor ? '-o ColorModel=CMYK' : '-o ColorModel=Gray';
-      // 2. Orientation: 3 for portrait, 4 for landscape
-      const orientationOption = order.orientation === 'landscape' ? '-o orientation-requested=4' : '-o orientation-requested=3';
-      // 3. Number of copies
-      const copiesOption = `-n ${Math.max(1, order.copies || 1)}`;
-      // 4. Duplex (two-sided vs one-sided)
-      const duplexOption = order.is_duplex ? '-o sides=two-sided-long-edge' : '-o sides=one-sided';
-      // 5. Page Range (if custom)
-      const pageRangeOption = order.page_range && order.page_range !== 'all' ? `-P ${order.page_range}` : '';
-      // 6. Media, fit-to-page, and resolution
-      const mediaOption = '-o media=A4 -o fit-to-page -o resolution=600dpi';
-
-      const lpCommand = `lp -d "${selectedQueue}" ${colorOption} ${orientationOption} ${copiesOption} ${duplexOption} ${pageRangeOption} ${mediaOption} "${targetFilePath}"`.replace(/\s+/g, ' ');
-
+      // -----------------------------------------------------------------------
+      // HARDWARE PRINT TRANSMISSION (WINDOWS vs LINUX)
+      // -----------------------------------------------------------------------
       try {
-        const { stdout } = await execAsync(lpCommand);
-        console.log(`[PrintWorker] CUPS dispatch successful: ${stdout.trim()}`);
+        if (process.platform === 'win32') {
+          const ext = path.extname(targetFilePath).toLowerCase();
+          const isImage = ['.jpg', '.jpeg', '.png', '.bmp', '.webp', '.gif', '.tiff'].includes(ext);
+
+          console.log(`[PrintWorker] [Windows] Sending job to physical printer "${selectedPrinter}" (File: ${path.basename(targetFilePath)}, Type: ${isImage ? 'Image/Photo' : ext === '.pdf' ? 'PDF' : 'Text'})...`);
+
+          if (isImage) {
+            // High-quality native GDI graphical photo printing
+            const printScript = path.resolve(__dirname, 'printImageWindows.ps1');
+            const safeImgPath = targetFilePath.replace(/'/g, "''");
+            const safePrinter = selectedPrinter.replace(/'/g, "''");
+            const orientationParam = order.orientation === 'landscape' ? 'landscape' : 'portrait';
+            const copiesParam = Math.max(1, order.copies || 1);
+            const rotateParam = Number((order as any).rotation) || 0;
+            const psCommand = `powershell -ExecutionPolicy Bypass -File "${printScript}" -ImagePath "${safeImgPath}" -PrinterName "${safePrinter}" -Orientation "${orientationParam}" -Copies ${copiesParam} -RotateDegrees ${rotateParam}`;
+            const { stdout } = await execAsync(psCommand);
+            console.log(`[PrintWorker] ✓ Physical photo print job sent to Windows printer "${selectedPrinter}"! ${stdout.trim()}`);
+          } else if (ext === '.pdf') {
+            const printOptions: any = {
+              printer: selectedPrinter,
+              copies: Math.max(1, order.copies || 1),
+            };
+
+            // Specify exact page range if custom, or restrict to 1 page if total_pages is 1
+            if (order.page_range && order.page_range !== 'all') {
+              printOptions.pages = order.page_range;
+            } else if (Number(order.total_pages) === 1 || Number(order.doc_pages) === 1) {
+              printOptions.pages = '1';
+            }
+
+            if (order.orientation === 'landscape' || order.orientation === 'portrait') {
+              printOptions.orientation = order.orientation;
+            }
+            if (order.is_duplex) {
+              printOptions.side = 'duplexlong';
+            }
+            if (order.color_mode === 'bw') {
+              printOptions.monochrome = true;
+            }
+
+            await ptp.print(targetFilePath, printOptions);
+            console.log(`[PrintWorker] ✓ Physical PDF print job sent to Windows printer "${selectedPrinter}"!`);
+          } else if (ext === '.txt') {
+            // ONLY pure text files are allowed to use Out-Printer
+            const safePath = targetFilePath.replace(/'/g, "''");
+            const safePrinter = selectedPrinter.replace(/'/g, "''");
+            await execAsync(
+              `powershell -Command "Get-Content -LiteralPath '${safePath}' | Out-Printer -Name '${safePrinter}'"`
+            );
+            console.log(`[PrintWorker] ✓ Text document dispatched to Windows printer "${selectedPrinter}"!`);
+          } else {
+            console.warn(`[PrintWorker] Unsupported file extension '${ext}' for direct printing.`);
+          }
+        } else {
+          // Linux CUPS lp command
+          const colorOption = isColor ? '-o ColorModel=CMYK' : '-o ColorModel=Gray';
+          const orientationOption = order.orientation === 'landscape' ? '-o orientation-requested=4' : '-o orientation-requested=3';
+          const copiesOption = `-n ${Math.max(1, order.copies || 1)}`;
+          const duplexOption = order.is_duplex ? '-o sides=two-sided-long-edge' : '-o sides=one-sided';
+          const pageRangeOption = order.page_range && order.page_range !== 'all' ? `-P ${order.page_range}` : '';
+          const mediaOption = '-o media=A4 -o fit-to-page -o resolution=600dpi';
+
+          const lpCommand = `lp -d "${selectedPrinter}" ${colorOption} ${orientationOption} ${copiesOption} ${duplexOption} ${pageRangeOption} ${mediaOption} "${targetFilePath}"`.replace(/\s+/g, ' ');
+          const { stdout } = await execAsync(lpCommand);
+          console.log(`[PrintWorker] CUPS dispatch successful: ${stdout.trim()}`);
+        }
 
         await pool.query(
           `INSERT INTO shopkeeper_notifications (terminal_id, type, title, message, is_read)
            VALUES ('#04', 'printing_started', ?, ?, FALSE)`,
           [
             `Printing Started • ${order.id}`,
-            `Sent to ${selectedQueue} (${isColor ? 'Color' : 'B&W Laser'}) • ${order.file_name}`,
+            `Sent to ${selectedPrinter} (${isColor ? 'Color' : 'B&W Laser'}) • ${order.file_name}`,
           ]
         );
       } catch (err: any) {
-        console.warn(`[PrintWorker] CUPS execution warning for ${order.id}:`, err.message || err);
-      } finally {
-        if (isTempFile && fs.existsSync(targetFilePath)) {
-          setTimeout(() => {
-            try { fs.unlinkSync(targetFilePath); } catch {}
-          }, 10000);
-        }
+        console.warn(`[PrintWorker] Hardware print dispatch warning for ${order.id}:`, err.message || err);
       }
     }
   } catch (error) {
