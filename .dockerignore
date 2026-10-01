@@ -1,0 +1,15 @@
+node_modules
+dist
+dist-ssr
+.git
+.gitignore
+uploads/*
+!uploads/.gitkeep
+logs
+*.log
+.env
+.env.*
+server/.env
+server/.env.*
+.vscode
+.idea

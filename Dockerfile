@@ -1,5 +1,7 @@
 # Production Dockerfile for Imprevo Smart Kiosk with CUPS Subsystem
-FROM node:22-bullseye-slim
+FROM node:22-bookworm-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Install CUPS printing system and printer discovery utilities
 RUN apt-get update && apt-get install -y --no-install-recommends \
