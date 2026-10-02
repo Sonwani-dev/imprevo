@@ -46,14 +46,17 @@ interface SystemPrinterItem {
   id: string;
   name: string;
   displayName: string;
-  connectionType: 'usb' | 'network_ipp' | 'cups_local' | 'network_socket';
+  identifier?: string;
+  connectionType: 'usb' | 'network' | 'network_ipp' | 'cups_local' | 'virtual' | 'other';
   uri?: string;
-  status: 'ready' | 'idle' | 'offline' | 'busy';
+  status: 'Available' | 'Ready' | 'Idle' | 'Offline' | 'Printing' | 'Busy' | 'Error' | 'Unknown';
   isDefault: boolean;
   isRealSystemPrinter: boolean;
   recommendedFor: 'bw' | 'color' | 'both';
   colorSupport: boolean;
   description: string;
+  portName?: string;
+  driverName?: string;
 }
 
 export const DashboardPage: React.FC = () => {
@@ -71,9 +74,13 @@ export const DashboardPage: React.FC = () => {
   const [systemPrinters, setSystemPrinters] = useState<SystemPrinterItem[]>([]);
   const [isScanningPrinters, setIsScanningPrinters] = useState<boolean>(false);
   const [isSavingPrinters, setIsSavingPrinters] = useState<boolean>(false);
-  const [isTestingPrint, setIsTestingPrint] = useState<'bw' | 'color' | null>(null);
-  const [selectedBwPrinterId, setSelectedBwPrinterId] = useState<string>('brother_hl_l6400dw');
-  const [selectedColorPrinterId, setSelectedColorPrinterId] = useState<string>('canon_ir_adv_c3530i');
+  const [isTestingPrint, setIsTestingPrint] = useState<string | null>(null);
+  const [selectedDefaultPrinterId, setSelectedDefaultPrinterId] = useState<string>('');
+  const [selectedBwPrinterId, setSelectedBwPrinterId] = useState<string>('');
+  const [selectedColorPrinterId, setSelectedColorPrinterId] = useState<string>('');
+  const [lastScannedAt, setLastScannedAt] = useState<string | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [missingPrinterWarning, setMissingPrinterWarning] = useState<string | null>(null);
 
   // Live Database States
   const [shop, setShop] = useState({
@@ -180,8 +187,17 @@ export const DashboardPage: React.FC = () => {
       if (res.ok) {
         const data = await res.json();
         if (data.config) {
-          setSelectedBwPrinterId(data.config.bw_printer_id || 'brother_hl_l6400dw');
-          setSelectedColorPrinterId(data.config.color_printer_id || 'canon_ir_adv_c3530i');
+          const cfg = data.config;
+          if (cfg.default_printer_id) setSelectedDefaultPrinterId(cfg.default_printer_id);
+          if (cfg.bw_printer_id) setSelectedBwPrinterId(cfg.bw_printer_id);
+          if (cfg.color_printer_id) setSelectedColorPrinterId(cfg.color_printer_id);
+
+          if (cfg.isDefaultDetected === false || cfg.isBwDetected === false) {
+            const missing = cfg.default_printer_name || cfg.bw_printer_name;
+            if (missing) {
+              setMissingPrinterWarning(`Previously saved printer "${missing}" is no longer detected by your system. Please reconnect the printer or select an available printer below.`);
+            }
+          }
         }
       }
     } catch (err) {
@@ -189,23 +205,60 @@ export const DashboardPage: React.FC = () => {
     }
   }, []);
 
-  // 5. Scan system printers using CUPS/Linux discovery
+  // 5. Scan system printers using operating system discovery
   const scanSystemPrinters = useCallback(async (notify = false) => {
     setIsScanningPrinters(true);
+    setScanError(null);
     try {
-      const res = await fetch('/api/printers/system');
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data.printers)) {
-          setSystemPrinters(data.printers);
-          if (notify) {
-            showToast(`✓ Found ${data.printers.length} printer destination(s) on system`);
-          }
+      const res = await fetch('/api/printers/scan');
+      let data = await res.json().catch(() => null);
+
+      if (!res.ok || !data?.success) {
+        // Fallback to /api/printers/system if /scan returned error
+        const fallbackRes = await fetch('/api/printers/system').catch(() => null);
+        if (fallbackRes && fallbackRes.ok) {
+          data = await fallbackRes.json().catch(() => null);
         }
       }
-    } catch (err) {
+
+      if (data && data.success && Array.isArray(data.printers)) {
+        setSystemPrinters(data.printers);
+        setLastScannedAt(new Date().toLocaleTimeString());
+
+        // Check if any previously selected printer is now missing
+        const detectedList: SystemPrinterItem[] = data.printers;
+        if (detectedList.length > 0) {
+          const defaultDetected = detectedList.find((p) => p.isDefault) || detectedList[0];
+          setSelectedDefaultPrinterId((prev) => prev || defaultDetected.id);
+          setSelectedBwPrinterId((prev) => prev || defaultDetected.id);
+          setSelectedColorPrinterId((prev) => prev || defaultDetected.id);
+
+          // Validate selected printers
+          setSelectedBwPrinterId((currentBw) => {
+            if (currentBw && !detectedList.some((p) => p.id === currentBw || p.name.toLowerCase() === currentBw.toLowerCase())) {
+              setMissingPrinterWarning(`Previously selected printer is no longer detected. Please select one of the available printers below.`);
+            } else {
+              setMissingPrinterWarning(null);
+            }
+            return currentBw;
+          });
+        } else {
+          setMissingPrinterWarning('No printers are currently detected by the operating system.');
+        }
+
+        if (notify) {
+          showToast(`✓ Found ${data.printers.length} printer(s) connected to this system`);
+        }
+      } else {
+        const errorMsg = data?.error || 'Failed to scan operating system printers';
+        setScanError(errorMsg);
+        if (notify) showToast(`⚠️ Scan failed: ${errorMsg}`);
+      }
+    } catch (err: any) {
       console.warn('Scan system printers error:', err);
-      if (notify) showToast('Could not scan system printers');
+      const errorMsg = err.message || 'Could not connect to local printing service';
+      setScanError(errorMsg);
+      if (notify) showToast(`⚠️ Scan failed: ${errorMsg}`);
     } finally {
       setIsScanningPrinters(false);
     }
@@ -231,48 +284,52 @@ export const DashboardPage: React.FC = () => {
   const handleSavePrinterConfig = async () => {
     setIsSavingPrinters(true);
     try {
-      const bw = systemPrinters.find((p) => p.id === selectedBwPrinterId) || {
-        id: selectedBwPrinterId,
-        displayName: 'Brother HL-L6400DW (B&W Laser)',
-        connectionType: 'network_ipp',
-        status: 'ready',
-        uri: 'ipp://192.168.1.120/ipp/print',
-      };
-      const isSame = selectedBwPrinterId === selectedColorPrinterId;
+      const defPrinter = systemPrinters.find((p) => p.id === selectedDefaultPrinterId) ||
+        systemPrinters.find((p) => p.isDefault) ||
+        systemPrinters[0];
+
+      const bw = systemPrinters.find((p) => p.id === selectedBwPrinterId) || defPrinter;
+      const isSame = selectedBwPrinterId === selectedColorPrinterId || !selectedColorPrinterId;
       const color = isSame
         ? bw
-        : (systemPrinters.find((p) => p.id === selectedColorPrinterId) || {
-            id: selectedColorPrinterId,
-            displayName: 'Canon imageRUNNER ADVANCE C3530i (Color Laser)',
-            connectionType: 'network_ipp',
-            status: 'ready',
-            uri: 'ipp://192.168.1.125/ipp/print',
-          });
+        : (systemPrinters.find((p) => p.id === selectedColorPrinterId) || defPrinter || bw);
 
       const res = await fetch('/api/printers/configure', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          bwPrinter: {
+          terminalId: '#04',
+          defaultPrinter: defPrinter ? {
+            id: defPrinter.id,
+            name: defPrinter.name,
+            displayName: defPrinter.displayName,
+            connectionType: defPrinter.connectionType,
+            uri: defPrinter.uri,
+            status: defPrinter.status,
+          } : undefined,
+          bwPrinter: bw ? {
             id: bw.id,
-            name: bw.displayName,
+            name: bw.name,
+            displayName: bw.displayName,
             connectionType: bw.connectionType,
             uri: bw.uri,
             status: bw.status,
-          },
-          colorPrinter: {
+          } : undefined,
+          colorPrinter: color ? {
             id: color.id,
-            name: color.displayName,
+            name: color.name,
+            displayName: color.displayName,
             connectionType: color.connectionType,
             uri: color.uri,
             status: color.status,
-          },
+          } : undefined,
           useSameForBoth: isSame,
         }),
       });
 
       if (res.ok) {
         showToast('✓ Printer hardware successfully configured!');
+        setMissingPrinterWarning(null);
         fetchStats();
         fetchPrinterConfig();
       } else {
@@ -285,33 +342,41 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
-  const handleTestPrint = async (type: 'bw' | 'color', specificPrinter?: { name: string; displayName: string }) => {
-    setIsTestingPrint(type);
-    try {
-      const targetObj = specificPrinter || (type === 'bw'
+  const handleTestPrint = async (targetIdOrType: string, specificPrinter?: SystemPrinterItem) => {
+    const targetObj = specificPrinter || (
+      targetIdOrType === 'bw'
         ? systemPrinters.find((p) => p.id === selectedBwPrinterId)
-        : systemPrinters.find((p) => p.id === selectedColorPrinterId));
+        : targetIdOrType === 'color'
+        ? systemPrinters.find((p) => p.id === selectedColorPrinterId)
+        : targetIdOrType === 'default'
+        ? systemPrinters.find((p) => p.id === selectedDefaultPrinterId)
+        : systemPrinters.find((p) => p.id === targetIdOrType || p.name === targetIdOrType)
+    );
 
-      const targetPrinterName = targetObj?.name || (type === 'bw' ? 'Virtual_BW_Laser' : 'Virtual_Color_Laser');
-      const targetDisplay = targetObj?.displayName || targetPrinterName;
+    const testKey = specificPrinter ? specificPrinter.id : targetIdOrType;
+    setIsTestingPrint(testKey);
 
+    const targetPrinterName = targetObj?.name || (targetIdOrType === 'color' ? 'Color Printer' : 'Default Printer');
+    const targetDisplay = targetObj?.displayName || targetPrinterName;
+
+    try {
       const res = await fetch('/api/printers/test-page', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          printerType: type, 
+          printerType: targetObj?.colorSupport ? 'color' : 'bw', 
           printerName: targetPrinterName,
-          printerQueue: targetObj?.name,
+          printerQueue: targetPrinterName,
         }),
       });
       const data = await res.json().catch(() => null);
       if (res.ok && data?.success) {
-        showToast(data.message || `✓ Test page sent to ${targetDisplay}`);
+        showToast(data.message || `✓ Test page submitted to ${targetDisplay}`);
       } else {
-        showToast(data?.error || `Could not print test page to ${targetDisplay}`);
+        showToast(data?.error || `Could not submit test page to ${targetDisplay}`);
       }
     } catch {
-      showToast(`Test print request dispatched to printer`);
+      showToast(`Test print request queued for ${targetDisplay}`);
     } finally {
       setTimeout(() => setIsTestingPrint(null), 1200);
     }
@@ -988,31 +1053,41 @@ export const DashboardPage: React.FC = () => {
                     <h1 className="font-headline-lg text-xl sm:text-headline-lg font-bold text-on-surface tracking-tight leading-none">
                       Configure Printers
                     </h1>
-                    <span className="text-[11px] font-bold text-primary uppercase tracking-wider">
-                      Settings
-                    </span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[11px] font-bold text-primary uppercase tracking-wider">
+                        Settings
+                      </span>
+                      {lastScannedAt && (
+                        <span className="text-[11px] text-on-surface-variant font-mono">
+                          • Last scan: {lastScannedAt}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <p className="font-body-md text-xs sm:text-body-md text-on-surface-variant mt-2">
-                  Detected printers connected to this system. Select which printer to use for B&W and Color printing.
+                  Detect printers installed on this machine in real-time. Choose your default printer for kiosk print jobs.
                 </p>
               </div>
 
               <div className="flex items-center gap-3 w-full sm:w-auto">
                 <button
                   type="button"
+                  id="scan-printers-btn"
                   disabled={isScanningPrinters}
                   onClick={() => scanSystemPrinters(true)}
-                  className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-semibold text-xs border border-surface-container-high transition-all cursor-pointer disabled:opacity-50"
+                  className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-bold text-xs border border-surface-container-high transition-all cursor-pointer shadow-xs active:scale-95 disabled:opacity-50"
+                  title="Scan for installed USB and network printers on this computer"
                 >
-                  <span className={`material-symbols-outlined text-[18px] ${isScanningPrinters ? 'animate-spin' : ''}`}>
+                  <span className={`material-symbols-outlined text-[19px] ${isScanningPrinters ? 'animate-spin text-primary' : 'text-primary'}`}>
                     refresh
                   </span>
-                  <span>{isScanningPrinters ? 'Scanning...' : 'Scan Printers'}</span>
+                  <span>{isScanningPrinters ? 'Scanning Printers...' : 'Scan Printers'}</span>
                 </button>
 
                 <button
                   type="button"
+                  id="save-printer-config-btn"
                   disabled={isSavingPrinters}
                   onClick={handleSavePrinterConfig}
                   className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary font-bold text-xs shadow-sm hover:shadow-md transition-all cursor-pointer active:scale-95 disabled:opacity-50"
@@ -1025,88 +1100,253 @@ export const DashboardPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Current Active Selection Summary (2 clean cards) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* B&W Selection Card */}
-              <div className="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high shadow-xs flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0">
-                    <span className="material-symbols-outlined text-[20px]">print</span>
-                  </div>
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
-                      B&W Printer
+            {/* Warning Banner: Missing or Disconnected Saved Printer */}
+            {missingPrinterWarning && (
+              <div className="w-full bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-start justify-between gap-3 text-amber-900 dark:text-amber-200">
+                <div className="flex items-start gap-3 min-w-0">
+                  <span className="material-symbols-outlined text-amber-600 dark:text-amber-400 text-[22px] shrink-0 mt-0.5">
+                    warning
+                  </span>
+                  <div className="flex flex-col text-xs">
+                    <span className="font-bold text-sm text-amber-950 dark:text-amber-100">
+                      Printer Missing or Offline Warning
                     </span>
-                    <span className="font-bold text-sm text-on-surface truncate">
-                      {systemPrinters.find((p) => p.id === selectedBwPrinterId)?.displayName || 'None Selected'}
-                    </span>
+                    <p className="mt-0.5 leading-relaxed text-amber-800 dark:text-amber-300">
+                      {missingPrinterWarning}
+                    </p>
                   </div>
                 </div>
                 <button
                   type="button"
-                  disabled={isTestingPrint === 'bw'}
-                  onClick={() => handleTestPrint('bw')}
-                  className="px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-xs font-semibold text-on-surface shrink-0 border border-surface-container-high cursor-pointer transition-colors"
+                  disabled={isScanningPrinters}
+                  onClick={() => scanSystemPrinters(true)}
+                  className="px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shrink-0 cursor-pointer shadow-xs transition-colors"
                 >
-                  {isTestingPrint === 'bw' ? 'Sending...' : 'Test Print'}
+                  Rescan Printers
                 </button>
               </div>
+            )}
+
+            {/* Error Banner: Scan Failure */}
+            {scanError && (
+              <div className="w-full bg-rose-500/10 border border-rose-500/30 rounded-xl p-4 flex items-start justify-between gap-3 text-rose-900 dark:text-rose-200">
+                <div className="flex items-start gap-3 min-w-0">
+                  <span className="material-symbols-outlined text-rose-600 dark:text-rose-400 text-[22px] shrink-0 mt-0.5">
+                    error
+                  </span>
+                  <div className="flex flex-col text-xs">
+                    <span className="font-bold text-sm text-rose-950 dark:text-rose-100">
+                      Printer Scan Failed
+                    </span>
+                    <p className="mt-0.5 leading-relaxed text-rose-800 dark:text-rose-300">
+                      {scanError}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={isScanningPrinters}
+                  onClick={() => scanSystemPrinters(true)}
+                  className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shrink-0 cursor-pointer shadow-xs transition-colors"
+                >
+                  Retry Scan
+                </button>
+              </div>
+            )}
+
+            {/* Current Active Selection Summary (3 Cards: Default, B&W, Color) */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Default Kiosk Printer Card */}
+              {(() => {
+                const defPrinter = systemPrinters.find((p) => p.id === selectedDefaultPrinterId);
+                const isMissing = selectedDefaultPrinterId && !defPrinter && systemPrinters.length > 0;
+                return (
+                  <div className="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high shadow-xs flex flex-col justify-between gap-3 relative overflow-hidden">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-700 dark:text-amber-400 flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined text-[22px]">star</span>
+                      </div>
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                            Default Kiosk Printer
+                          </span>
+                        </div>
+                        <span className="font-bold text-sm text-on-surface truncate mt-0.5" title={defPrinter?.displayName || 'None Selected'}>
+                          {defPrinter?.displayName || (selectedDefaultPrinterId ? 'Configured Printer' : 'None Selected')}
+                        </span>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className={`w-2 h-2 rounded-full ${
+                            isMissing ? 'bg-amber-500 animate-pulse' : defPrinter?.status === 'Offline' ? 'bg-rose-500' : 'bg-emerald-500'
+                          }`} />
+                          <span className="text-[11px] font-mono text-on-surface-variant">
+                            {isMissing ? 'Missing from system' : defPrinter?.status || 'Not configured'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between pt-2 border-t border-surface-container-high">
+                      <span className="text-[11px] text-on-surface-variant uppercase font-mono">
+                        {defPrinter?.connectionType || 'Spooler'}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={isTestingPrint === 'default' || !defPrinter}
+                        onClick={() => handleTestPrint('default', defPrinter)}
+                        className="px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-xs font-semibold text-on-surface border border-surface-container-high cursor-pointer transition-colors disabled:opacity-50"
+                      >
+                        {isTestingPrint === 'default' ? 'Sending...' : 'Test Print'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* B&W Selection Card */}
+              {(() => {
+                const bwPrinter = systemPrinters.find((p) => p.id === selectedBwPrinterId);
+                const isMissing = selectedBwPrinterId && !bwPrinter && systemPrinters.length > 0;
+                return (
+                  <div className="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high shadow-xs flex flex-col justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined text-[20px]">print</span>
+                      </div>
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
+                          B&W Printer
+                        </span>
+                        <span className="font-bold text-sm text-on-surface truncate mt-0.5" title={bwPrinter?.displayName || 'None Selected'}>
+                          {bwPrinter?.displayName || (selectedBwPrinterId ? 'Configured Printer' : 'None Selected')}
+                        </span>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className={`w-2 h-2 rounded-full ${
+                            isMissing ? 'bg-amber-500 animate-pulse' : bwPrinter?.status === 'Offline' ? 'bg-rose-500' : 'bg-emerald-500'
+                          }`} />
+                          <span className="text-[11px] font-mono text-on-surface-variant">
+                            {isMissing ? 'Missing from system' : bwPrinter?.status || 'Not configured'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between pt-2 border-t border-surface-container-high">
+                      <span className="text-[11px] text-on-surface-variant uppercase font-mono">
+                        {bwPrinter?.connectionType || 'Spooler'}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={isTestingPrint === 'bw' || !bwPrinter}
+                        onClick={() => handleTestPrint('bw', bwPrinter)}
+                        className="px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-xs font-semibold text-on-surface border border-surface-container-high cursor-pointer transition-colors disabled:opacity-50"
+                      >
+                        {isTestingPrint === 'bw' ? 'Sending...' : 'Test Print'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Color Selection Card */}
-              <div className="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high shadow-xs flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-pink-500 text-white flex items-center justify-center shrink-0">
-                    <span className="material-symbols-outlined text-[20px]">palette</span>
+              {(() => {
+                const colorPrinter = systemPrinters.find((p) => p.id === selectedColorPrinterId);
+                const isMissing = selectedColorPrinterId && !colorPrinter && systemPrinters.length > 0;
+                return (
+                  <div className="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high shadow-xs flex flex-col justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-pink-500 text-white flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined text-[20px]">palette</span>
+                      </div>
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
+                          Color Printer
+                        </span>
+                        <span className="font-bold text-sm text-on-surface truncate mt-0.5" title={colorPrinter?.displayName || 'None Selected'}>
+                          {colorPrinter?.displayName || (selectedColorPrinterId ? 'Configured Printer' : 'None Selected')}
+                        </span>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className={`w-2 h-2 rounded-full ${
+                            isMissing ? 'bg-amber-500 animate-pulse' : colorPrinter?.status === 'Offline' ? 'bg-rose-500' : 'bg-emerald-500'
+                          }`} />
+                          <span className="text-[11px] font-mono text-on-surface-variant">
+                            {isMissing ? 'Missing from system' : colorPrinter?.status || 'Not configured'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between pt-2 border-t border-surface-container-high">
+                      <span className="text-[11px] text-on-surface-variant uppercase font-mono">
+                        {colorPrinter?.connectionType || 'Spooler'}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={isTestingPrint === 'color' || !colorPrinter}
+                        onClick={() => handleTestPrint('color', colorPrinter)}
+                        className="px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-xs font-semibold text-on-surface border border-surface-container-high cursor-pointer transition-colors disabled:opacity-50"
+                      >
+                        {isTestingPrint === 'color' ? 'Sending...' : 'Test Print'}
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
-                      Color Printer
-                    </span>
-                    <span className="font-bold text-sm text-on-surface truncate">
-                      {systemPrinters.find((p) => p.id === selectedColorPrinterId)?.displayName || 'None Selected'}
-                    </span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  disabled={isTestingPrint === 'color'}
-                  onClick={() => handleTestPrint('color')}
-                  className="px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-xs font-semibold text-on-surface shrink-0 border border-surface-container-high cursor-pointer transition-colors"
-                >
-                  {isTestingPrint === 'color' ? 'Sending...' : 'Test Print'}
-                </button>
-              </div>
+                );
+              })()}
             </div>
 
-            {/* LIST OF DETECTED PRINTERS */}
+            {/* LIST OF DETECTED SYSTEM PRINTERS */}
             <div className="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-high overflow-hidden flex flex-col">
               <div className="p-4 sm:p-5 border-b border-surface-container-high flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-base text-on-surface">Detected System Printers</span>
-                  <span className="px-2 py-0.5 rounded-full bg-primary-fixed text-primary font-bold text-xs">
-                    {systemPrinters.length} Found
+                  <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary font-bold text-xs">
+                    {systemPrinters.length} Detected
                   </span>
                 </div>
                 <span className="text-xs text-on-surface-variant">
-                  Click a button to select as B&W or Color printer
+                  Select a printer to assign as Default, B&W, or Color printer
                 </span>
               </div>
 
               <div className="divide-y divide-surface-container-high">
                 {systemPrinters.length === 0 ? (
-                  <div className="p-8 text-center text-on-surface-variant text-sm flex flex-col items-center gap-3">
-                    <span className="material-symbols-outlined text-4xl text-outline">print_disabled</span>
-                    <span>No printers detected from system. Click "Scan Printers" above to check again.</span>
+                  <div className="p-8 sm:p-12 text-center text-on-surface-variant text-sm flex flex-col items-center gap-4">
+                    <div className="w-16 h-16 rounded-2xl bg-surface-container flex items-center justify-center text-outline">
+                      <span className="material-symbols-outlined text-[36px]">print_disabled</span>
+                    </div>
+                    <div className="max-w-md">
+                      <h3 className="font-bold text-base text-on-surface">No Printers Detected on Local System</h3>
+                      <p className="text-xs text-on-surface-variant mt-1.5 leading-relaxed">
+                        We queried your operating system spooler but found no active printer destinations.
+                      </p>
+                      <div className="text-xs text-left bg-surface-container/60 rounded-xl p-3.5 mt-3 space-y-1.5 text-on-surface-variant">
+                        <div className="font-semibold text-on-surface">Troubleshooting steps:</div>
+                        <div>1. Verify that your USB or network printer cable is plugged into this kiosk computer.</div>
+                        <div>2. Ensure the printer power switch is turned ON.</div>
+                        <div>3. Make sure the printer driver is installed in Windows/CUPS settings.</div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={isScanningPrinters}
+                      onClick={() => scanSystemPrinters(true)}
+                      className="px-4 py-2 rounded-xl bg-primary text-on-primary font-bold text-xs flex items-center gap-2 cursor-pointer shadow-sm hover:shadow-md transition-all disabled:opacity-50"
+                    >
+                      <span className={`material-symbols-outlined text-[18px] ${isScanningPrinters ? 'animate-spin' : ''}`}>refresh</span>
+                      <span>{isScanningPrinters ? 'Scanning...' : 'Scan Printers Again'}</span>
+                    </button>
                   </div>
                 ) : (
                   systemPrinters.map((printer) => {
+                    const isDefault = selectedDefaultPrinterId === printer.id;
                     const isBw = selectedBwPrinterId === printer.id;
                     const isColor = selectedColorPrinterId === printer.id;
+                    const isTesting = isTestingPrint === printer.id;
+
+                    const isOffline = printer.status === 'Offline';
+                    const isPrinting = printer.status === 'Printing' || printer.status === 'Busy';
 
                     return (
                       <div
                         key={printer.id}
-                        className="p-4 sm:p-5 hover:bg-surface-container-low/30 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4"
+                        className="p-4 sm:p-5 hover:bg-surface-container-low/30 transition-colors flex flex-col lg:flex-row lg:items-center justify-between gap-4"
                       >
                         {/* Printer Info */}
                         <div className="flex items-start sm:items-center gap-3.5 min-w-0">
@@ -1121,35 +1361,88 @@ export const DashboardPage: React.FC = () => {
                           <div className="flex flex-col min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-bold text-sm sm:text-base text-on-surface">
-                                {printer.displayName}
+                                {printer.displayName || printer.name}
                               </span>
-                              <span className="px-2 py-0.5 rounded bg-surface-container text-[10px] font-mono uppercase text-on-surface-variant">
+
+                              {/* Connection Badge */}
+                              <span className="px-2 py-0.5 rounded bg-surface-container text-[10px] font-mono uppercase text-on-surface-variant font-bold">
                                 {printer.connectionType.replace('_', ' ')}
                               </span>
+
+                              {/* Status Badge */}
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 ${
+                                isOffline
+                                  ? 'bg-rose-500/15 text-rose-700 dark:text-rose-400'
+                                  : isPrinting
+                                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                                  : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                              }`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${
+                                  isOffline ? 'bg-rose-500' : isPrinting ? 'bg-amber-500' : 'bg-emerald-500'
+                                }`} />
+                                <span>{printer.status}</span>
+                              </span>
+
+                              {/* OS Default Badge */}
+                              {printer.isDefault && (
+                                <span className="px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-400 text-[10px] font-bold">
+                                  OS Default
+                                </span>
+                              )}
+
+                              {/* Role Badges */}
+                              {isDefault && (
+                                <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-800 dark:text-amber-300 text-[11px] font-bold flex items-center gap-1">
+                                  <span className="material-symbols-outlined text-[14px]">star</span>
+                                  <span>Default Printer</span>
+                                </span>
+                              )}
                               {isBw && (
                                 <span className="px-2.5 py-0.5 rounded-full bg-slate-900 text-white text-[11px] font-bold">
-                                  ✓ B&W Printer
+                                  ✓ B&W
                                 </span>
                               )}
                               {isColor && (
                                 <span className="px-2.5 py-0.5 rounded-full bg-primary text-on-primary text-[11px] font-bold">
-                                  ✓ Color Printer
+                                  ✓ Color
                                 </span>
                               )}
                             </div>
+
                             <span className="font-mono text-xs text-on-surface-variant truncate mt-0.5">
-                              {printer.uri || printer.name} • Status: {printer.status}
+                              {printer.description || (printer.portName ? `Port: ${printer.portName}` : printer.name)}
                             </span>
                           </div>
                         </div>
 
                         {/* Quick Assign Buttons */}
-                        <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+                        <div className="flex items-center gap-2 shrink-0 self-end lg:self-center flex-wrap">
+                          {/* Set as Default Action */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedDefaultPrinterId(printer.id);
+                              if (!selectedBwPrinterId) setSelectedBwPrinterId(printer.id);
+                              if (!selectedColorPrinterId) setSelectedColorPrinterId(printer.id);
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1 ${
+                              isDefault
+                                ? 'bg-amber-500 text-white shadow-xs'
+                                : 'bg-surface-container hover:bg-surface-container-high text-on-surface border border-surface-container-high'
+                            }`}
+                            title="Set as Default Kiosk Printer for all customer jobs"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">
+                              {isDefault ? 'check' : 'star'}
+                            </span>
+                            <span>{isDefault ? 'Default' : 'Set as Default'}</span>
+                          </button>
+
                           {/* Set as B&W */}
                           <button
                             type="button"
                             onClick={() => setSelectedBwPrinterId(printer.id)}
-                            className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                               isBw
                                 ? 'bg-slate-900 text-white shadow-xs'
                                 : 'bg-surface-container hover:bg-surface-container-high text-on-surface border border-surface-container-high'
@@ -1162,7 +1455,7 @@ export const DashboardPage: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => setSelectedColorPrinterId(printer.id)}
-                            className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                               isColor
                                 ? 'bg-primary text-on-primary shadow-xs'
                                 : 'bg-surface-container hover:bg-surface-container-high text-on-surface border border-surface-container-high'
@@ -1171,14 +1464,22 @@ export const DashboardPage: React.FC = () => {
                             {isColor ? '✓ Selected Color' : 'Set as Color'}
                           </button>
 
-                          {/* Quick Test */}
+                          {/* Test Print Action */}
                           <button
                             type="button"
-                            onClick={() => handleTestPrint(printer.colorSupport ? 'color' : 'bw', printer)}
-                            className="px-3 py-2 rounded-lg text-xs font-medium text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors cursor-pointer border border-surface-container-high"
-                            title={`Test Print to ${printer.displayName}`}
+                            disabled={isTesting}
+                            onClick={() => handleTestPrint(printer.id, printer)}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors cursor-pointer border border-surface-container-high flex items-center gap-1 disabled:opacity-50"
+                            title={`Send diagnostic test page to ${printer.displayName}`}
                           >
-                            Test
+                            {isTesting ? (
+                              <>
+                                <span className="material-symbols-outlined text-[14px] animate-spin">refresh</span>
+                                <span>Sending...</span>
+                              </>
+                            ) : (
+                              <span>Test Print</span>
+                            )}
                           </button>
                         </div>
                       </div>

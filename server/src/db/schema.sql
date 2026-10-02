@@ -44,6 +44,11 @@ CREATE TABLE IF NOT EXISTS printer_hardware (
 
 CREATE TABLE IF NOT EXISTS printer_configs (
   terminal_id VARCHAR(50) PRIMARY KEY,
+  default_printer_id VARCHAR(100) NULL,
+  default_printer_name VARCHAR(150) NULL,
+  default_connection_type VARCHAR(50) NULL,
+  default_device_uri VARCHAR(255) NULL,
+  default_status VARCHAR(50) NOT NULL DEFAULT 'ready',
   bw_printer_id VARCHAR(100) NOT NULL DEFAULT 'brother_hl_l6400dw',
   bw_printer_name VARCHAR(150) NOT NULL DEFAULT 'Brother HL-L6400DW (B&W Laser)',
   bw_connection_type VARCHAR(50) NOT NULL DEFAULT 'network_ipp',

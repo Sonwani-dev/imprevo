@@ -230,4 +230,87 @@ export const api = {
     if (!res.ok) throw new Error('Failed to request shopkeeper assistance');
     return await res.json();
   },
+
+  // Printers API
+  async scanPrinters(signal?: AbortSignal): Promise<{
+    success: boolean;
+    printers: any[];
+    totalFound?: number;
+    scannedAt?: string;
+    os?: string;
+    error?: string;
+  }> {
+    try {
+      const res = await fetch('/api/printers/scan', { signal });
+      if (!res.ok) {
+        // Fallback to /api/printers/system if needed
+        const fallbackRes = await fetch('/api/printers/system', { signal }).catch(() => null);
+        if (fallbackRes && fallbackRes.ok) {
+          return await fallbackRes.json();
+        }
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Scanner returned HTTP ${res.status}`);
+      }
+      return await res.json();
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        throw err;
+      }
+      console.warn('Scan printers API error:', err);
+      return {
+        success: false,
+        printers: [],
+        error: err.message || 'Could not connect to local printing subsystem',
+      };
+    }
+  },
+
+  async getPrinterConfig(terminalId = '#04') {
+    const res = await fetch(`/api/printers/config?terminalId=${encodeURIComponent(terminalId)}`);
+    if (!res.ok) throw new Error('Failed to fetch printer configuration');
+    return await res.json();
+  },
+
+  async savePrinterConfig(payload: {
+    terminalId?: string;
+    defaultPrinter?: any;
+    bwPrinter?: any;
+    colorPrinter?: any;
+    useSameForBoth?: boolean;
+  }) {
+    const res = await fetch('/api/printers/configure', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Failed to save printer configuration');
+    return await res.json();
+  },
+
+  async testPrint(payload: {
+    printerType?: 'bw' | 'color';
+    printerName: string;
+    printerQueue?: string;
+  }) {
+    const res = await fetch('/api/printers/test-page', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.success) {
+      throw new Error(data?.error || 'Test print failed to dispatch');
+    }
+    return data;
+  },
+
+  async validatePrinter(printerName: string) {
+    const res = await fetch('/api/printers/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ printerName }),
+    });
+    return await res.json();
+  },
 };
+

@@ -15,39 +15,38 @@ const ptp = require('pdf-to-printer');
 
 const execAsync = promisify(exec);
 
+import { printerDiscoveryManager } from './printerDiscovery.js';
+
 let isWorkerRunning = false;
 let isProcessingTick = false;
+let lastMissingPrinterAlert = 0;
+let lastOfflinePrinterAlert = 0;
 
-/**
- * Discovers available printer queues on Windows or Linux
- */
-async function getAvailablePrinters(): Promise<string[]> {
-  if (process.platform === 'win32') {
-    try {
-      const printers = await ptp.getPrinters();
-      const names = printers.map((p: any) => p.name).filter(Boolean);
-      if (names.length > 0) return names;
-    } catch {}
-
-    try {
-      const { stdout } = await execAsync('powershell -Command "Get-CimInstance Win32_Printer | Select-Object -ExpandProperty Name"');
-      return stdout.split('\n').map((s) => s.trim()).filter((s) => s.length > 0);
-    } catch {
-      return [];
-    }
-  }
-
-  // Linux CUPS
+async function notifyMissingPrinter(printerName: string, orderId: string): Promise<void> {
+  if (Date.now() - lastMissingPrinterAlert < 60000) return;
+  lastMissingPrinterAlert = Date.now();
   try {
-    const { stdout } = await execAsync('lpstat -e 2>/dev/null || true');
-    return stdout
-      .split('\n')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0 && !s.includes('No destinations'));
-  } catch {
-    return [];
-  }
+    await pool.query(
+      `INSERT INTO shopkeeper_notifications (terminal_id, type, title, message, is_read)
+       VALUES ('#04', 'system', 'Selected Printer Missing', ?, FALSE)`,
+      [`Order ${orderId} is on hold: Selected printer "${printerName}" is not detected on this system. Please check the printer connection or select an available printer in Settings.`]
+    );
+  } catch {}
 }
+
+async function notifyOfflinePrinter(printerName: string, orderId: string): Promise<void> {
+  if (Date.now() - lastOfflinePrinterAlert < 60000) return;
+  lastOfflinePrinterAlert = Date.now();
+  try {
+    await pool.query(
+      `INSERT INTO shopkeeper_notifications (terminal_id, type, title, message, is_read)
+       VALUES ('#04', 'system', 'Printer Offline', ?, FALSE)`,
+      [`Order ${orderId} is on hold: Printer "${printerName}" is reported offline. Please verify printer power and cable connection.`]
+    );
+  } catch {}
+}
+
+
 
 /**
  * Checks whether a specific printer or system has an active job printing
@@ -168,51 +167,54 @@ export async function processPrintQueueTick(): Promise<void> {
       );
       const config = configRows[0] || {};
 
-      // Determine target printer based on user's color_mode preference
+      // Determine target printer based on user's color_mode preference and default printer
       const isColor = order.color_mode === 'color';
       let targetName = (isColor
-        ? (config.color_printer_name || '')
-        : (config.bw_printer_name || '')).trim();
+        ? (config.color_printer_name || config.default_printer_name || '')
+        : (config.bw_printer_name || config.default_printer_name || '')).trim();
 
-      // Resolve against available printers on Windows or Linux
-      const availablePrinters = await getAvailablePrinters();
-      let selectedPrinter = '';
+      // Scan local operating system in real-time to validate presence
+      const scanResult = await printerDiscoveryManager.scan();
+      const livePrinters = scanResult.printers || [];
 
-      // Strip extra descriptors like "(Laser)", "(B&W Laser)", etc.
-      const cleanTarget = targetName.replace(/\s*\([^)]*\)/g, '').trim();
+      // Clean name for matching
+      const cleanTarget = targetName.replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
 
-      if (availablePrinters.length > 0) {
-        // 1. Exact match
-        const exactMatch = availablePrinters.find(
-          (p) => p.toLowerCase() === targetName.toLowerCase() || p.toLowerCase() === cleanTarget.toLowerCase()
+      // Match target against genuinely detected system printers
+      let matchedPrinter = livePrinters.find(
+        (p) =>
+          p.name.toLowerCase() === targetName.toLowerCase() ||
+          p.name.toLowerCase() === cleanTarget ||
+          p.identifier.toLowerCase() === cleanTarget ||
+          p.displayName.toLowerCase() === cleanTarget
+      );
+
+      if (!matchedPrinter && cleanTarget) {
+        matchedPrinter = livePrinters.find(
+          (p) =>
+            p.name.toLowerCase().includes(cleanTarget) ||
+            cleanTarget.includes(p.name.toLowerCase()) ||
+            p.name.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanTarget.replace(/[^a-z0-9]/g, '')
         );
-        if (exactMatch) {
-          selectedPrinter = exactMatch;
-        } else {
-          // 2. Fuzzy match
-          const fuzzy = availablePrinters.find(
-            (p) =>
-              p.toLowerCase().includes(cleanTarget.toLowerCase()) ||
-              cleanTarget.toLowerCase().includes(p.toLowerCase()) ||
-              p.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanTarget.toLowerCase().replace(/[^a-z0-9]/g, '')
-          );
-          if (fuzzy) {
-            selectedPrinter = fuzzy;
-          } else if (process.platform === 'win32') {
-            try {
-              const def = await ptp.getDefaultPrinter();
-              if (def && def.name) selectedPrinter = def.name;
-            } catch {}
-          }
-        }
-
-        // Final fallback among available printers
-        if (!selectedPrinter) {
-          selectedPrinter = availablePrinters[0];
-        }
-      } else {
-        selectedPrinter = cleanTarget || (isColor ? 'Color_Printer' : 'BW_Printer');
       }
+
+      // CRITICAL REQUIREMENTS 4 & 5:
+      // "Validate that the selected printer still exists before sending a print job.
+      // If it is missing or unavailable, prevent unintended printing and request another selection.
+      // Do not silently send jobs to a different printer."
+      if (!matchedPrinter) {
+        console.warn(`[PrintWorker] Configured printer "${targetName || 'None'}" is not detected by the local operating system. Holding Order ${order.id} to prevent unintended printing.`);
+        await notifyMissingPrinter(targetName || 'Not configured', order.id);
+        return;
+      }
+
+      if (matchedPrinter.status === 'Offline') {
+        console.warn(`[PrintWorker] Selected printer "${matchedPrinter.name}" is currently reported Offline. Holding Order ${order.id}.`);
+        await notifyOfflinePrinter(matchedPrinter.name, order.id);
+        return;
+      }
+
+      const selectedPrinter = matchedPrinter.name;
 
       // Check whether this printer is currently busy
       const busyInSpooler = await isPrinterBusy(selectedPrinter);

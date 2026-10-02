@@ -53,17 +53,36 @@ export async function initializeDatabase(): Promise<void> {
         status = VALUES(status);
     `);
 
-    // 3b. Seed default printer config for terminal #04
+    // 3b. Ensure default printer columns exist if table was previously created
+    try {
+      await connection.query(`
+        ALTER TABLE printer_configs 
+        ADD COLUMN default_printer_id VARCHAR(100) NULL,
+        ADD COLUMN default_printer_name VARCHAR(150) NULL,
+        ADD COLUMN default_connection_type VARCHAR(50) NULL,
+        ADD COLUMN default_device_uri VARCHAR(255) NULL,
+        ADD COLUMN default_status VARCHAR(50) DEFAULT 'ready';
+      `);
+    } catch {}
+
+    // Seed default printer config for terminal #04
     await connection.query(`
       INSERT INTO printer_configs (
-        terminal_id, bw_printer_id, bw_printer_name, bw_connection_type, bw_device_uri, bw_status,
+        terminal_id, 
+        default_printer_id, default_printer_name, default_connection_type, default_device_uri, default_status,
+        bw_printer_id, bw_printer_name, bw_connection_type, bw_device_uri, bw_status,
         color_printer_id, color_printer_name, color_connection_type, color_device_uri, color_status,
         use_same_printer_for_both
       ) VALUES (
-        '#04', 'brother_hl_l6400dw', 'Canon LBP2900 (Laser)', 'usb', 'usb://Canon_LBP2900', 'ready',
-        'canon_ir_adv_c3530i', 'Canon LBP2900 (Laser)', 'usb', 'usb://Canon_LBP2900', 'ready',
+        '#04',
+        'win_Canon_LBP2900', 'Canon LBP2900', 'usb', 'windows://Canon%20LBP2900', 'ready',
+        'win_Canon_LBP2900', 'Canon LBP2900', 'usb', 'windows://Canon%20LBP2900', 'ready',
+        'win_Canon_LBP2900', 'Canon LBP2900', 'usb', 'windows://Canon%20LBP2900', 'ready',
         TRUE
-      ) ON DUPLICATE KEY UPDATE bw_status = VALUES(bw_status), color_status = VALUES(color_status);
+      ) ON DUPLICATE KEY UPDATE 
+        default_printer_name = COALESCE(default_printer_name, VALUES(default_printer_name)),
+        bw_status = VALUES(bw_status), 
+        color_status = VALUES(color_status);
     `);
 
     // 4. Seed default pricing rules

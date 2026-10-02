@@ -47,14 +47,14 @@ Printers connect to the Imprevo Kiosk host machine (Linux PC, mini-PC, or kiosk 
 ## 2. How System Scanning & Auto-Detection Works
 
 When the shopkeeper clicks **"Scan Printers"** on the dashboard, the frontend calls:
-`GET /api/printers/system`
+`GET /api/printers/scan` (with alias support for `/api/printers/system`)
 
 ### The Under-the-Hood Discovery Engine
 
-The Express backend ([`server/src/routes/printers.ts`](file:///home/sonwani-dev/Desktop/Work/imprevo/server/src/routes/printers.ts)) executes native Linux system commands using `child_process.exec`:
+The Express backend uses `printerDiscoveryManager` ([`server/src/services/printerDiscovery.ts`](file:///c:/Users/win/Downloads/imprevo-main/server/src/services/printerDiscovery.ts)) implementing the common `IPrinterDiscoveryService` to query Windows Printing Subsystem (CIM/WMI/Win32_Printer) or Linux CUPS in real-time:
 
 ```
-Frontend [Scan Printers] ──▶ GET /api/printers/system ──▶ Linux CLI Subsystem
+Frontend [Scan Printers] ──▶ GET /api/printers/scan ──▶ OS Printing Subsystem (Windows / CUPS)
                                                               │
                     ┌─────────────────┬───────────────────────┼────────────────────┐
                     ▼                 ▼                       ▼                    ▼
