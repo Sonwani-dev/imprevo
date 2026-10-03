@@ -53,7 +53,7 @@ export async function initializeDatabase(): Promise<void> {
         status = VALUES(status);
     `);
 
-    // 3b. Ensure default printer columns exist if table was previously created
+    // 3b. Ensure default printer columns exist and columns are nullable if table was previously created
     try {
       await connection.query(`
         ALTER TABLE printer_configs 
@@ -65,7 +65,17 @@ export async function initializeDatabase(): Promise<void> {
       `);
     } catch {}
 
-    // Seed default printer config for terminal #04
+    try {
+      await connection.query(`
+        ALTER TABLE printer_configs 
+        MODIFY COLUMN bw_printer_id VARCHAR(100) NULL,
+        MODIFY COLUMN bw_printer_name VARCHAR(150) NULL,
+        MODIFY COLUMN color_printer_id VARCHAR(100) NULL,
+        MODIFY COLUMN color_printer_name VARCHAR(150) NULL;
+      `);
+    } catch {}
+
+    // Ensure printer config row exists for terminal #04 without hardcoding specific printer models
     await connection.query(`
       INSERT INTO printer_configs (
         terminal_id, 
@@ -75,14 +85,12 @@ export async function initializeDatabase(): Promise<void> {
         use_same_printer_for_both
       ) VALUES (
         '#04',
-        'win_Canon_LBP2900', 'Canon LBP2900', 'usb', 'windows://Canon%20LBP2900', 'ready',
-        'win_Canon_LBP2900', 'Canon LBP2900', 'usb', 'windows://Canon%20LBP2900', 'ready',
-        'win_Canon_LBP2900', 'Canon LBP2900', 'usb', 'windows://Canon%20LBP2900', 'ready',
+        NULL, NULL, 'usb', NULL, 'ready',
+        NULL, NULL, 'usb', NULL, 'ready',
+        NULL, NULL, 'usb', NULL, 'ready',
         TRUE
       ) ON DUPLICATE KEY UPDATE 
-        default_printer_name = COALESCE(default_printer_name, VALUES(default_printer_name)),
-        bw_status = VALUES(bw_status), 
-        color_status = VALUES(color_status);
+        terminal_id = terminal_id;
     `);
 
     // 4. Seed default pricing rules

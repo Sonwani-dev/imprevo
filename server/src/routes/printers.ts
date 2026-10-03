@@ -122,7 +122,7 @@ router.get('/config', async (req: Request, res: Response) => {
     const scanResult = await printerDiscoveryManager.scan();
     const livePrinters = scanResult.printers || [];
 
-    if (savedConfig) {
+    if (savedConfig && (savedConfig.default_printer_name || savedConfig.bw_printer_name)) {
       // Check whether saved printers are currently detected
       const isDefaultDetected = savedConfig.default_printer_name
         ? livePrinters.some((p) => p.name.toLowerCase() === savedConfig.default_printer_name.toLowerCase())

@@ -49,10 +49,9 @@ export class WindowsPrinterDiscoveryService implements IPrinterDiscoveryService 
 
     // Attempt 1: Windows CIM/WMI Subsystem via PowerShell (fast, non-interactive, rich telemetry)
     try {
-      // Safe, fixed command line querying Win32_Printer without any external variables
       const psCommand = 'powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Printer | Select-Object Name, DeviceID, Default, PrinterStatus, PrinterState, WorkOffline, PortName, DriverName, DetectedErrorState, ExtendedPrinterStatus | ConvertTo-Json -Compress"';
       
-      const { stdout } = await execAsync(psCommand, { timeout: 6000 });
+      const { stdout } = await execAsync(psCommand, { timeout: 12000 });
       if (stdout && stdout.trim()) {
         const raw = JSON.parse(stdout.trim());
         const list = Array.isArray(raw) ? raw : [raw];
@@ -162,10 +161,120 @@ export class WindowsPrinterDiscoveryService implements IPrinterDiscoveryService 
         }
       }
     } catch (cimErr) {
-      console.warn('[WindowsPrinterDiscovery] Win32_Printer CIM query failed, trying .NET / ptp fallback:', cimErr);
+      console.warn('[WindowsPrinterDiscovery] Win32_Printer CIM query failed, trying Get-Printer / Registry fallback:', cimErr);
     }
 
-    // Attempt 2: pdf-to-printer native Windows spooler query fallback
+    // Attempt 2: Modern PowerShell Get-Printer cmdlet fallback (faster, native print management)
+    try {
+      const getPrinterCmd = 'powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Printer | Select-Object Name, Type, DriverName, PortName, PrinterStatus | ConvertTo-Json -Compress"';
+      const { stdout: gpOut } = await execAsync(getPrinterCmd, { timeout: 8000 });
+      if (gpOut && gpOut.trim()) {
+        const raw = JSON.parse(gpOut.trim());
+        const list = Array.isArray(raw) ? raw : [raw];
+
+        let defaultPrinterName = '';
+        try {
+          const { stdout: defOut } = await execAsync('powershell -NoProfile -Command "(Get-CimInstance Win32_Printer -Filter Default=True).Name"', { timeout: 4000 });
+          defaultPrinterName = defOut.trim();
+        } catch {}
+
+        for (const item of list) {
+          const name = String(item.Name || '').trim();
+          if (!name) continue;
+
+          const port = String(item.PortName || '').trim();
+          const driver = String(item.DriverName || '').trim();
+          const portUpper = port.toUpperCase();
+          const nameLower = name.toLowerCase();
+
+          const isVirtual =
+            portUpper.startsWith('PORTPROMPT') ||
+            portUpper.startsWith('MICROSOFT') ||
+            nameLower.includes('pdf') ||
+            nameLower.includes('onenote') ||
+            nameLower.includes('xps') ||
+            driver.toLowerCase().includes('software printer driver');
+
+          const isUsb = portUpper.includes('USB') || !isVirtual;
+          const isColor = nameLower.includes('color') || nameLower.includes('cmyk') || nameLower.includes('ecotank') || nameLower.includes('pixma');
+          const isDefault = defaultPrinterName ? name.toLowerCase() === defaultPrinterName.toLowerCase() : discovered.length === 0;
+
+          discovered.push({
+            id: `win_${name.replace(/[^a-zA-Z0-9_]/g, '_')}`,
+            name,
+            displayName: name,
+            identifier: name,
+            status: 'Available',
+            isDefault,
+            connectionType: isVirtual ? 'virtual' : isUsb ? 'usb' : 'network',
+            portName: port || undefined,
+            driverName: driver || undefined,
+            uri: `windows://${encodeURIComponent(name)}`,
+            colorSupport: isColor,
+            recommendedFor: isColor ? 'color' : 'bw',
+            isRealSystemPrinter: !isVirtual,
+            description: `Windows Spooler Printer • Port: ${port || 'Standard'} • Driver: ${driver || 'Generic'}`,
+          });
+        }
+
+        if (discovered.length > 0) {
+          return discovered;
+        }
+      }
+    } catch (gpErr) {
+      console.warn('[WindowsPrinterDiscovery] Get-Printer query fallback notice:', gpErr);
+    }
+
+    // Attempt 3: Pure Windows Registry Query (reg query) - ZERO-DEPENDENCY, FAILS-SAFE (<50ms)
+    // Works even if PowerShell is restricted, slow, or WMI service is unresponsive
+    try {
+      const { stdout: regOut } = await execAsync('reg query "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Print\\Printers"', { timeout: 4000 });
+      let defaultPrinter = '';
+      try {
+        const { stdout: defOut } = await execAsync('reg query "HKCU\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Windows" /v Device', { timeout: 3000 });
+        const match = defOut.match(/Device\s+REG_SZ\s+([^,\r\n]+)/i);
+        if (match) defaultPrinter = match[1].trim();
+      } catch {}
+
+      for (const line of regOut.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Print\\Printers\\')) {
+          let name = trimmed.replace('HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Print\\Printers\\', '').trim();
+          if (name.includes(':')) {
+            name = name.split(':').pop() || name;
+          }
+          if (!name) continue;
+
+          const nameLower = name.toLowerCase();
+          const isVirtual = nameLower.includes('pdf') || nameLower.includes('onenote') || nameLower.includes('xps');
+          const isColor = nameLower.includes('color') || nameLower.includes('cmyk') || nameLower.includes('ecotank') || nameLower.includes('pixma');
+          const isDefault = defaultPrinter ? name.toLowerCase() === defaultPrinter.toLowerCase() : discovered.length === 0;
+
+          discovered.push({
+            id: `win_${name.replace(/[^a-zA-Z0-9_]/g, '_')}`,
+            name,
+            displayName: name,
+            identifier: name,
+            status: 'Available',
+            isDefault,
+            connectionType: isVirtual ? 'virtual' : 'usb',
+            uri: `windows://${encodeURIComponent(name)}`,
+            colorSupport: isColor,
+            recommendedFor: isColor ? 'color' : 'bw',
+            isRealSystemPrinter: !isVirtual,
+            description: `Windows Registry Detected Spooler Printer • ${name}`,
+          });
+        }
+      }
+
+      if (discovered.length > 0) {
+        return discovered;
+      }
+    } catch (regErr) {
+      console.warn('[WindowsPrinterDiscovery] Windows Registry printer query fallback notice:', regErr);
+    }
+
+    // Attempt 4: pdf-to-printer native Windows spooler query fallback
     try {
       const ptp = require('pdf-to-printer');
       const printers = await ptp.getPrinters();
@@ -205,7 +314,7 @@ export class WindowsPrinterDiscoveryService implements IPrinterDiscoveryService 
       console.warn('[WindowsPrinterDiscovery] pdf-to-printer query fallback notice:', ptpErr);
     }
 
-    // Attempt 3: .NET System.Drawing.Printing.PrinterSettings fallback
+    // Attempt 5: .NET System.Drawing.Printing.PrinterSettings fallback
     try {
       const netCommand = 'powershell -NoProfile -Command "Add-Type -AssemblyName System.Drawing; [System.Drawing.Printing.PrinterSettings]::InstalledPrinters"';
       const { stdout } = await execAsync(netCommand, { timeout: 5000 });
@@ -322,7 +431,7 @@ export class LinuxPrinterDiscoveryService implements IPrinterDiscoveryService {
         });
       }
 
-      // 6. Check for newly plugged USB or LAN printers not yet added to CUPS
+      // 6. Check for newly plugged USB or LAN printers reported by hardware subsystem
       try {
         const { stdout: hwInfo } = await execAsync('timeout 2 lpinfo -v 2>/dev/null || true', { timeout: 3000 });
         const hwLines = hwInfo.split('\n').filter((l) => l.startsWith('direct usb://') || l.startsWith('network ipp://'));
@@ -338,23 +447,20 @@ export class LinuxPrinterDiscoveryService implements IPrinterDiscoveryService {
             : 'Network_Printer_' + Math.floor(Math.random() * 1000);
 
           if (!destinations.some((d) => d.toLowerCase() === cleanName.toLowerCase() || uriMap.get(d) === hwUri)) {
-            try {
-              await execAsync(`lpadmin -p "${cleanName}" -E -v "${hwUri}" -m everywhere 2>/dev/null || lpadmin -p "${cleanName}" -E -v "${hwUri}"`);
-              discovered.push({
-                id: `hw_${cleanName}`,
-                name: cleanName,
-                displayName: cleanName.replace(/_/g, ' '),
-                identifier: cleanName,
-                status: 'Available',
-                isDefault: discovered.length === 0,
-                connectionType: isUsbHw ? 'usb' : 'network_ipp',
-                uri: hwUri,
-                colorSupport: true,
-                recommendedFor: 'both',
-                isRealSystemPrinter: true,
-                description: `Hardware Detected (${isUsbHw ? 'USB Direct' : 'Network IPP'})`,
-              });
-            } catch {}
+            discovered.push({
+              id: `hw_${cleanName}`,
+              name: cleanName,
+              displayName: cleanName.replace(/_/g, ' '),
+              identifier: cleanName,
+              status: 'Available',
+              isDefault: discovered.length === 0,
+              connectionType: isUsbHw ? 'usb' : 'network_ipp',
+              uri: hwUri,
+              colorSupport: true,
+              recommendedFor: 'both',
+              isRealSystemPrinter: true,
+              description: `Hardware Detected (${isUsbHw ? 'USB Direct' : 'Network IPP'})`,
+            });
           }
         }
       } catch {}

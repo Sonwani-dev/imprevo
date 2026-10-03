@@ -71,12 +71,20 @@ if (fs.existsSync(distDir)) {
 
 // Start server
 async function startServer() {
+  app.listen(PORT, () => {
+    console.log(`✨ Server ready at http://localhost:${PORT}`);
+    console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
+    if (fs.existsSync(distDir)) {
+      console.log(`🌐 Serving production frontend from ${distDir}`);
+    }
+  });
+
   const maxRetries = 3;
   let dbReady = false;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`🚀 Starting Imprevo Kiosk API Server (attempt ${attempt}/${maxRetries})...`);
+      console.log(`🚀 Connecting Imprevo Kiosk API to database (attempt ${attempt}/${maxRetries})...`);
       await initializeDatabase();
       initPrintQueueWorker();
       dbReady = true;
@@ -91,17 +99,9 @@ async function startServer() {
   }
 
   if (!dbReady) {
-    console.warn('⚠️ Starting server without active database connection. Running with memory/fallback.');
+    console.warn('⚠️ Server running without active database connection. Running with memory/fallback.');
     try { initPrintQueueWorker(); } catch {}
   }
-
-  app.listen(PORT, () => {
-    console.log(`✨ Server ready at http://localhost:${PORT}`);
-    console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
-    if (fs.existsSync(distDir)) {
-      console.log(`🌐 Serving production frontend from ${distDir}`);
-    }
-  });
 }
 
 startServer();

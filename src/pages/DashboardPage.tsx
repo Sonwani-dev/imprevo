@@ -192,11 +192,10 @@ export const DashboardPage: React.FC = () => {
           if (cfg.bw_printer_id) setSelectedBwPrinterId(cfg.bw_printer_id);
           if (cfg.color_printer_id) setSelectedColorPrinterId(cfg.color_printer_id);
 
-          if (cfg.isDefaultDetected === false || cfg.isBwDetected === false) {
-            const missing = cfg.default_printer_name || cfg.bw_printer_name;
-            if (missing) {
-              setMissingPrinterWarning(`Previously saved printer "${missing}" is no longer detected by your system. Please reconnect the printer or select an available printer below.`);
-            }
+          if (cfg.default_printer_name && cfg.isDefaultDetected === false) {
+            setMissingPrinterWarning(`Previously saved printer "${cfg.default_printer_name}" is no longer detected by your system. Please reconnect the printer or select an available printer below.`);
+          } else {
+            setMissingPrinterWarning(null);
           }
         }
       }
@@ -225,23 +224,28 @@ export const DashboardPage: React.FC = () => {
         setSystemPrinters(data.printers);
         setLastScannedAt(new Date().toLocaleTimeString());
 
-        // Check if any previously selected printer is now missing
         const detectedList: SystemPrinterItem[] = data.printers;
         if (detectedList.length > 0) {
           const defaultDetected = detectedList.find((p) => p.isDefault) || detectedList[0];
-          setSelectedDefaultPrinterId((prev) => prev || defaultDetected.id);
-          setSelectedBwPrinterId((prev) => prev || defaultDetected.id);
-          setSelectedColorPrinterId((prev) => prev || defaultDetected.id);
-
-          // Validate selected printers
-          setSelectedBwPrinterId((currentBw) => {
-            if (currentBw && !detectedList.some((p) => p.id === currentBw || p.name.toLowerCase() === currentBw.toLowerCase())) {
-              setMissingPrinterWarning(`Previously selected printer is no longer detected. Please select one of the available printers below.`);
-            } else {
-              setMissingPrinterWarning(null);
+          setSelectedDefaultPrinterId((prev) => {
+            if (!prev || !detectedList.some((p) => p.id === prev || p.name.toLowerCase() === prev.toLowerCase())) {
+              return defaultDetected.id;
             }
-            return currentBw;
+            return prev;
           });
+          setSelectedBwPrinterId((prev) => {
+            if (!prev || !detectedList.some((p) => p.id === prev || p.name.toLowerCase() === prev.toLowerCase())) {
+              return defaultDetected.id;
+            }
+            return prev;
+          });
+          setSelectedColorPrinterId((prev) => {
+            if (!prev || !detectedList.some((p) => p.id === prev || p.name.toLowerCase() === prev.toLowerCase())) {
+              return defaultDetected.id;
+            }
+            return prev;
+          });
+          setMissingPrinterWarning(null);
         } else {
           setMissingPrinterWarning('No printers are currently detected by the operating system.');
         }
