@@ -39,19 +39,28 @@ if ($Orientation -eq 'landscape') {
     $doc.DefaultPageSettings.Landscape = $false
 }
 
-# Auto-match A4 paper if supported
-foreach ($ps in $doc.PrinterSettings.PaperSizes) {
-    if ($ps.PaperName -match 'A4' -or $ps.RawKind -eq 9) {
-        $doc.DefaultPageSettings.PaperSize = $ps
-        break
-    }
+# Detect if target is a thermal label printer
+$isLabelPrinter = $false
+$lowerName = $PrinterName.ToLower()
+if ($lowerName -match 'tsc|ttp|label|barcode|thermal|zebra|xprinter|pos|receipt|4b|gprinter' -or $doc.DefaultPageSettings.PaperSize.PaperName -match 'USER|Roll|Continuous|Receipt' -or $doc.DefaultPageSettings.PaperSize.RawKind -eq 256) {
+    $isLabelPrinter = $true
 }
 
-# Auto-match main tray or multi-purpose tray to avoid Manual Feed pause on laser printers
-foreach ($src in $doc.PrinterSettings.PaperSources) {
-    if ($src.SourceName -match 'Tray|Auto|Multi' -or $src.RawKind -eq 4 -or $src.RawKind -eq 7) {
-        $doc.DefaultPageSettings.PaperSource = $src
-        break
+if (-not $isLabelPrinter) {
+    # Auto-match A4 paper if supported for laser/inkjet printers
+    foreach ($ps in $doc.PrinterSettings.PaperSizes) {
+        if ($ps.PaperName -match 'A4' -or $ps.RawKind -eq 9) {
+            $doc.DefaultPageSettings.PaperSize = $ps
+            break
+        }
+    }
+
+    # Auto-match main tray or multi-purpose tray to avoid Manual Feed pause on laser printers
+    foreach ($src in $doc.PrinterSettings.PaperSources) {
+        if ($src.SourceName -match 'Tray|Auto|Multi' -or $src.RawKind -eq 4 -or $src.RawKind -eq 7) {
+            $doc.DefaultPageSettings.PaperSource = $src
+            break
+        }
     }
 }
 

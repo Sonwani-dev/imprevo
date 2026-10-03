@@ -19,6 +19,7 @@ import { printerDiscoveryManager } from './printerDiscovery.js';
 
 let isWorkerRunning = false;
 let isProcessingTick = false;
+let lastTickStartTime = 0;
 let lastMissingPrinterAlert = 0;
 let lastOfflinePrinterAlert = 0;
 
@@ -46,8 +47,6 @@ async function notifyOfflinePrinter(printerName: string, orderId: string): Promi
   } catch {}
 }
 
-
-
 /**
  * Checks whether a specific printer or system has an active job printing
  */
@@ -56,7 +55,8 @@ async function isPrinterBusy(printerName: string): Promise<boolean> {
     try {
       const safeName = printerName.replace(/'/g, "''");
       const { stdout } = await execAsync(
-        `powershell -Command "Get-PrintJob -PrinterName '${safeName}' -ErrorAction SilentlyContinue | Measure-Object | Select-Object -ExpandProperty Count"`
+        `powershell -Command "Get-PrintJob -PrinterName '${safeName}' -ErrorAction SilentlyContinue | Where-Object { \\$_.JobStatus -match 'Printing|Spooling' } | Measure-Object | Select-Object -ExpandProperty Count"`,
+        { timeout: 3000 }
       );
       const count = parseInt(stdout.trim(), 10);
       return !isNaN(count) && count > 0;
@@ -66,7 +66,7 @@ async function isPrinterBusy(printerName: string): Promise<boolean> {
   }
 
   try {
-    const { stdout } = await execAsync(`lpstat -o "${printerName}" 2>/dev/null || true`);
+    const { stdout } = await execAsync(`lpstat -o "${printerName}" 2>/dev/null || true`, { timeout: 3000 });
     return stdout.trim().length > 0;
   } catch {
     return false;
@@ -77,8 +77,15 @@ async function isPrinterBusy(printerName: string): Promise<boolean> {
  * Core 3-second cycle function for the print queue worker
  */
 export async function processPrintQueueTick(): Promise<void> {
+  // If a tick has been stuck for over 45s, auto-release watchdog
+  if (isProcessingTick && Date.now() - lastTickStartTime > 45000) {
+    console.warn('[PrintWorker] Watchdog: previous tick timed out. Unlocking queue worker.');
+    isProcessingTick = false;
+  }
+
   if (isProcessingTick) return;
   isProcessingTick = true;
+  lastTickStartTime = Date.now();
 
   try {
     // =========================================================================
@@ -333,10 +340,17 @@ export async function processPrintQueueTick(): Promise<void> {
             const { stdout } = await execAsync(psCommand);
             console.log(`[PrintWorker] ✓ Physical photo print job sent to Windows printer "${selectedPrinter}"! ${stdout.trim()}`);
           } else if (ext === '.pdf') {
+            const isLabelPrinter = /tsc|ttp|label|barcode|thermal|zebra|xprinter|pos|receipt|4b|gprinter/i.test(selectedPrinter);
+
             const printOptions: any = {
               printer: selectedPrinter,
               copies: Math.max(1, order.copies || 1),
             };
+
+            if (!isLabelPrinter) {
+              printOptions.paperSize = 'A4';
+              printOptions.scale = 'fit';
+            }
 
             // Specify exact page range if custom, or restrict to 1 page if total_pages is 1
             if (order.page_range && order.page_range !== 'all') {
@@ -348,7 +362,7 @@ export async function processPrintQueueTick(): Promise<void> {
             if (order.orientation === 'landscape' || order.orientation === 'portrait') {
               printOptions.orientation = order.orientation;
             }
-            if (order.is_duplex) {
+            if (order.is_duplex && !isLabelPrinter) {
               printOptions.side = 'duplexlong';
             }
             if (order.color_mode === 'bw') {
@@ -357,50 +371,45 @@ export async function processPrintQueueTick(): Promise<void> {
 
             let printedSuccessfully = false;
 
-            // 1. Try native 64-bit headless Edge engine (present on all modern Windows 10/11)
-            const edgePath = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
-            if (fs.existsSync(edgePath)) {
-              try {
-                const safePath = targetFilePath.replace(/"/g, '\\"');
-                const safePrinter = selectedPrinter.replace(/"/g, '\\"');
-                const edgeCmd = `"${edgePath}" --headless --disable-gpu --print-to-printer="${safePrinter}" "${safePath}"`;
-                await execAsync(edgeCmd, { timeout: 25000 });
-                console.log(`[PrintWorker] ✓ Physical PDF dispatched via native 64-bit Edge print engine to "${selectedPrinter}"!`);
-                printedSuccessfully = true;
-              } catch (edgeErr: any) {
-                console.warn(`[PrintWorker] Edge print notice: ${edgeErr.message || edgeErr}`);
-              }
+            // 1. Primary: Direct SumatraPDF GDI host-based print engine
+            try {
+              await ptp.print(targetFilePath, printOptions);
+              console.log(`[PrintWorker] ✓ Physical PDF dispatched via GDI engine to Windows printer "${selectedPrinter}"!`);
+              printedSuccessfully = true;
+            } catch (ptpErr: any) {
+              console.warn(`[PrintWorker] SumatraPDF notice: ${ptpErr.message || ptpErr}. Attempting Windows Shell PrintTo fallback...`);
             }
 
-            // 2. Try Windows Shell PrintTo if not printed yet
+            // 2. Secondary fallback: Windows Shell PrintTo
             if (!printedSuccessfully) {
               try {
                 const safePath = targetFilePath.replace(/'/g, "''");
                 const safePrinter = selectedPrinter.replace(/'/g, "''");
                 await execAsync(
-                  `powershell -Command "Start-Process -FilePath '${safePath}' -Verb PrintTo -ArgumentList '\"${safePrinter}\"' -PassThru | Out-Null"`,
+                  `powershell -Command "Start-Process -FilePath '${safePath}' -Verb PrintTo -ArgumentList '\\"${safePrinter}\\"' -PassThru | Out-Null"`,
                   { timeout: 15000 }
                 );
-                console.log(`[PrintWorker] ✓ Physical PDF dispatched via Windows Shell PrintTo to "${selectedPrinter}"!`);
+                console.log(`[PrintWorker] ✓ Physical PDF dispatched via Windows Shell PrintTo fallback to "${selectedPrinter}"!`);
                 printedSuccessfully = true;
               } catch (shellErr: any) {
-                console.warn(`[PrintWorker] Shell PrintTo notice: ${shellErr.message || shellErr}`);
+                console.error(`[PrintWorker] Shell PrintTo fallback error: ${shellErr.message || shellErr}`);
+                throw new Error(`PDF spool transmission failed: ${shellErr.message || 'Driver error'}`);
               }
             }
-
-            // 3. Fallback to pdf-to-printer
-            if (!printedSuccessfully) {
-              await ptp.print(targetFilePath, printOptions);
-              console.log(`[PrintWorker] ✓ Physical PDF print job sent to Windows printer "${selectedPrinter}"!`);
-            }
           } else if (ext === '.txt') {
-            // ONLY pure text files are allowed to use Out-Printer
+            // High-quality native GDI text printing (compatible with Canon CAPT and thermal label printers)
+            let textScript = path.resolve(__dirname, 'printTextWindows.ps1');
+            if (!fs.existsSync(textScript)) {
+              textScript = path.resolve(process.cwd(), 'server/src/services/printTextWindows.ps1');
+            }
             const safePath = targetFilePath.replace(/'/g, "''");
             const safePrinter = selectedPrinter.replace(/'/g, "''");
+            const copiesParam = Math.max(1, order.copies || 1);
             await execAsync(
-              `powershell -Command "Get-Content -LiteralPath '${safePath}' | Out-Printer -Name '${safePrinter}'"`
+              `powershell -ExecutionPolicy Bypass -File "${textScript}" -FilePath "${safePath}" -PrinterName "${safePrinter}" -Copies ${copiesParam}`,
+              { timeout: 12000 }
             );
-            console.log(`[PrintWorker] ✓ Text document dispatched to Windows printer "${selectedPrinter}"!`);
+            console.log(`[PrintWorker] ✓ Text document dispatched via GDI to Windows printer "${selectedPrinter}"!`);
           } else {
             console.warn(`[PrintWorker] Unsupported file extension '${ext}' for direct printing.`);
           }

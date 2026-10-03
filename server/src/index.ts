@@ -26,6 +26,12 @@ const PORT = Number(process.env.PORT) || 5001;
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use((req, _res, next) => {
+  if (req.url.startsWith('/api') && !req.url.startsWith('/api/terminal/status') && !req.url.startsWith('/api/dashboard/stats')) {
+    console.log(`[HTTP] ${req.method} ${req.url}`);
+  }
+  next();
+});
 
 import fs from 'fs';
 

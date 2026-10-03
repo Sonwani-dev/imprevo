@@ -480,6 +480,9 @@ export class PrinterDiscoveryManager {
   private service: IPrinterDiscoveryService;
   private isScanning = false;
   private currentScanPromise: Promise<PrinterDiscoveryResult> | null = null;
+  private lastScanResult: PrinterDiscoveryResult | null = null;
+  private lastScanTime = 0;
+  private readonly CACHE_TTL_MS = 12000; // 12-second cache prevents worker tick lag while keeping discovery fresh
 
   constructor() {
     if (process.platform === 'win32') {
@@ -491,9 +494,13 @@ export class PrinterDiscoveryManager {
 
   /**
    * Scan printers from the operating system in real-time.
-   * Concurrency protected so simultaneous requests share the in-flight scan safely.
+   * Concurrency protected with a short 12s cache to eliminate PowerShell process lag.
    */
-  public async scan(): Promise<PrinterDiscoveryResult> {
+  public async scan(forceFresh = false): Promise<PrinterDiscoveryResult> {
+    if (!forceFresh && this.lastScanResult && Date.now() - this.lastScanTime < this.CACHE_TTL_MS) {
+      return this.lastScanResult;
+    }
+
     if (this.isScanning && this.currentScanPromise) {
       return this.currentScanPromise;
     }
@@ -508,7 +515,7 @@ export class PrinterDiscoveryManager {
 
         console.log(`[PrinterDiscovery] Discovered ${printers.length} printer(s) (${realCount} real system hardware) at ${scannedAt}`);
 
-        return {
+        const result: PrinterDiscoveryResult = {
           success: true,
           printers,
           totalFound: printers.length,
@@ -516,6 +523,10 @@ export class PrinterDiscoveryManager {
           scannedAt,
           os: process.platform,
         };
+
+        this.lastScanResult = result;
+        this.lastScanTime = Date.now();
+        return result;
       } catch (error: any) {
         console.error('[PrinterDiscovery] Error scanning printers from operating system:', error);
         return {

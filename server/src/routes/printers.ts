@@ -23,7 +23,7 @@ export type { DiscoveredPrinter };
  */
 router.get('/scan', async (req: Request, res: Response) => {
   try {
-    const result = await printerDiscoveryManager.scan();
+    const result = await printerDiscoveryManager.scan(true);
     let printers: DiscoveredPrinter[] = [...(result.printers || [])];
 
     // If host OS reports 0 printers (e.g. running in cloud container on Render / Heroku / Docker):
