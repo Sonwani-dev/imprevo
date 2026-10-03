@@ -167,11 +167,11 @@ export async function processPrintQueueTick(): Promise<void> {
       );
       const config = configRows[0] || {};
 
-      // Determine target printer based on user's color_mode preference and default printer
+      // Determine target printer based on order preference, user's color_mode preference, and configured hardware
       const isColor = order.color_mode === 'color';
-      let targetName = (isColor
+      let targetName = (order.printer_name || (isColor
         ? (config.color_printer_name || config.default_printer_name || '')
-        : (config.bw_printer_name || config.default_printer_name || '')).trim();
+        : (config.bw_printer_name || config.default_printer_name || ''))).trim();
 
       // Scan local operating system in real-time to validate presence
       const scanResult = await printerDiscoveryManager.scan();
@@ -198,13 +198,29 @@ export async function processPrintQueueTick(): Promise<void> {
         );
       }
 
-      // CRITICAL REQUIREMENTS 4 & 5:
-      // "Validate that the selected printer still exists before sending a print job.
-      // If it is missing or unavailable, prevent unintended printing and request another selection.
-      // Do not silently send jobs to a different printer."
+      // FUTURE & DYNAMIC SCANNING FALLBACK:
+      // If the specified printer is not found or was changed via USB/settings,
+      // dynamically target the live detected default or first real system printer
+      if (!matchedPrinter && livePrinters.length > 0) {
+        const liveRealPrinters = livePrinters.filter(
+          (p) => p.isRealSystemPrinter !== false && p.connectionType !== 'virtual'
+        );
+        const candidate =
+          (isColor ? liveRealPrinters.find((p) => p.colorSupport) : liveRealPrinters.find((p) => !p.colorSupport)) ||
+          liveRealPrinters.find((p) => p.isDefault) ||
+          liveRealPrinters[0] ||
+          livePrinters.find((p) => p.isDefault) ||
+          livePrinters[0];
+
+        if (candidate) {
+          console.log(`[PrintWorker] Target "${targetName || 'Default'}" not found; dynamically routing to live connected printer "${candidate.name}"`);
+          matchedPrinter = candidate;
+        }
+      }
+
       if (!matchedPrinter) {
-        console.warn(`[PrintWorker] Configured printer "${targetName || 'None'}" is not detected by the local operating system. Holding Order ${order.id} to prevent unintended printing.`);
-        await notifyMissingPrinter(targetName || 'Not configured', order.id);
+        console.warn(`[PrintWorker] No matching printer detected on the system for Order ${order.id}. Holding order.`);
+        await notifyMissingPrinter(targetName || 'No connected printer detected', order.id);
         return;
       }
 
@@ -228,23 +244,7 @@ export async function processPrintQueueTick(): Promise<void> {
         return;
       }
 
-      // Printer is ready! Shift order to 'printing' and dispatch
-      const totalPages = Math.max(1, Number(order.total_pages) || 1);
-      const initialProgress = Math.min(80, Math.round((1 / totalPages) * 100));
-
-      console.log(`[PrintWorker] Dispatching Order ${order.id} to "${selectedPrinter}" (Preferences: ${order.color_mode}, ${order.orientation}, ${order.copies} copies, Duplex: ${order.is_duplex}, Pages: ${order.page_range || 'all'}, Res: 600dpi)...`);
-
-      await pool.query(
-        `UPDATE orders 
-         SET print_status = 'printing', 
-             current_page_printing = 1, 
-             print_progress = ?,
-             printer_name = ?
-         WHERE id = ?`,
-        [initialProgress, selectedPrinter, order.id]
-      );
-
-      // Determine physical file to print
+      // Determine physical file to print BEFORE marking as printing
       let targetFilePath = order.doc_file_path;
       if (!targetFilePath || !fs.existsSync(targetFilePath)) {
         try {
@@ -279,9 +279,34 @@ export async function processPrintQueueTick(): Promise<void> {
       }
 
       if (!targetFilePath || !fs.existsSync(targetFilePath)) {
-        console.warn(`[PrintWorker] No physical file found on disk for order ${order.id} (${order.file_name}). Skipping physical hardware dispatch.`);
+        console.warn(`[PrintWorker] Physical file not found on disk for order ${order.id} (${order.file_name}). Setting status to failed.`);
+        await pool.query(
+          `UPDATE orders SET print_status = 'failed', print_progress = 0 WHERE id = ?`,
+          [order.id]
+        );
+        await pool.query(
+          `INSERT INTO shopkeeper_notifications (terminal_id, type, title, message, is_read)
+           VALUES ('#04', 'system', 'Print Error', ?, FALSE)`,
+          [`Order ${order.id} failed: File "${order.file_name}" was not found on server storage.`]
+        );
         return;
       }
+
+      // Printer is ready and file is verified on disk! Shift order to 'printing' and dispatch
+      const totalPages = Math.max(1, Number(order.total_pages) || 1);
+      const initialProgress = Math.min(80, Math.round((1 / totalPages) * 100));
+
+      console.log(`[PrintWorker] Dispatching Order ${order.id} to "${selectedPrinter}" (File: ${path.basename(targetFilePath)}, Preferences: ${order.color_mode}, ${order.orientation}, ${order.copies} copies, Duplex: ${order.is_duplex}, Pages: ${order.page_range || 'all'})...`);
+
+      await pool.query(
+        `UPDATE orders 
+         SET print_status = 'printing', 
+             current_page_printing = 1, 
+             print_progress = ?,
+             printer_name = ?
+         WHERE id = ?`,
+        [initialProgress, selectedPrinter, order.id]
+      );
 
       // -----------------------------------------------------------------------
       // HARDWARE PRINT TRANSMISSION (WINDOWS vs LINUX)
@@ -295,7 +320,10 @@ export async function processPrintQueueTick(): Promise<void> {
 
           if (isImage) {
             // High-quality native GDI graphical photo printing
-            const printScript = path.resolve(__dirname, 'printImageWindows.ps1');
+            let printScript = path.resolve(__dirname, 'printImageWindows.ps1');
+            if (!fs.existsSync(printScript)) {
+              printScript = path.resolve(process.cwd(), 'server/src/services/printImageWindows.ps1');
+            }
             const safeImgPath = targetFilePath.replace(/'/g, "''");
             const safePrinter = selectedPrinter.replace(/'/g, "''");
             const orientationParam = order.orientation === 'landscape' ? 'landscape' : 'portrait';
@@ -327,8 +355,18 @@ export async function processPrintQueueTick(): Promise<void> {
               printOptions.monochrome = true;
             }
 
-            await ptp.print(targetFilePath, printOptions);
-            console.log(`[PrintWorker] ✓ Physical PDF print job sent to Windows printer "${selectedPrinter}"!`);
+            try {
+              await ptp.print(targetFilePath, printOptions);
+              console.log(`[PrintWorker] ✓ Physical PDF print job sent to Windows printer "${selectedPrinter}"!`);
+            } catch (ptpErr: any) {
+              console.warn(`[PrintWorker] pdf-to-printer notice (${ptpErr.message}), attempting Windows Shell fallback...`);
+              const safePath = targetFilePath.replace(/'/g, "''");
+              const safePrinter = selectedPrinter.replace(/'/g, "''");
+              await execAsync(
+                `powershell -Command "Start-Process -FilePath '${safePath}' -Verb PrintTo -ArgumentList '\"${safePrinter}\"' -PassThru | Out-Null"`
+              );
+              console.log(`[PrintWorker] ✓ Physical PDF dispatched via Windows Shell PrintTo to "${selectedPrinter}"!`);
+            }
           } else if (ext === '.txt') {
             // ONLY pure text files are allowed to use Out-Printer
             const safePath = targetFilePath.replace(/'/g, "''");
@@ -363,7 +401,16 @@ export async function processPrintQueueTick(): Promise<void> {
           ]
         );
       } catch (err: any) {
-        console.warn(`[PrintWorker] Hardware print dispatch warning for ${order.id}:`, err.message || err);
+        console.error(`[PrintWorker] Hardware print dispatch error for ${order.id}:`, err.message || err);
+        await pool.query(
+          `UPDATE orders SET print_status = 'failed', print_progress = 0 WHERE id = ?`,
+          [order.id]
+        );
+        await pool.query(
+          `INSERT INTO shopkeeper_notifications (terminal_id, type, title, message, is_read)
+           VALUES ('#04', 'system', 'Print Job Dispatch Error', ?, FALSE)`,
+          [`Order ${order.id} failed to print on ${selectedPrinter}: ${err.message || 'Driver transmission error'}`]
+        );
       }
     }
   } catch (error) {

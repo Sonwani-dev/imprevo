@@ -6,6 +6,10 @@ import fs from 'fs';
 import pool from '../db/connection.js';
 import { printerDiscoveryManager } from '../services/printerDiscovery.js';
 import type { DiscoveredPrinter } from '../services/printerDiscovery.js';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const execAsync = promisify(exec);
 const router = Router();
@@ -644,12 +648,15 @@ Imprevo Kiosk Engine v1.0 • Genuine Print Job Subsystem
 
     if (process.platform === 'win32') {
       try {
-        const safePath = testFilePath.replace(/'/g, "''");
+        let testScript = path.resolve(__dirname, '../services/printTestPageWindows.ps1');
+        if (!fs.existsSync(testScript)) {
+          testScript = path.resolve(process.cwd(), 'server/src/services/printTestPageWindows.ps1');
+        }
         const safePrinter = targetQueue.replace(/'/g, "''");
-        const psCmd = `powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Content -LiteralPath '${safePath}' | Out-Printer -Name '${safePrinter}'"`;
-        await execAsync(psCmd, { timeout: 8000 });
+        const psCmd = `powershell -ExecutionPolicy Bypass -File "${testScript}" -PrinterName "${safePrinter}" -PrinterType "${isColor ? 'color' : 'bw'}"`;
+        const { stdout } = await execAsync(psCmd, { timeout: 12000 });
         jobId = `win_${Date.now()}`;
-        rawOutput = `Job queued to Windows Print Spooler for ${targetQueue}`;
+        rawOutput = stdout.trim() || `Job queued to Windows Print Spooler for ${targetQueue}`;
       } catch (winErr: any) {
         console.error('[Windows Print Test Error]:', winErr.message || winErr);
         try { fs.unlinkSync(testFilePath); } catch {}

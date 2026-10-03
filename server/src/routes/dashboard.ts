@@ -1,4 +1,6 @@
 import { Router, Request, Response } from 'express';
+import path from 'path';
+import fs from 'fs';
 import pool from '../db/connection.js';
 import { processPrintQueueTick } from '../services/printQueueWorker.js';
 
@@ -437,6 +439,43 @@ router.post('/test/create-order', async (req: Request, res: Response) => {
       [newId, fileName, pages, colorMode, rate, totalPrice, txnId, printStatus]
     );
 
+    // Ensure a physical document exists on disk and is linked to the test order so it can physically print
+    try {
+      const uploadsDir = path.resolve(process.cwd(), 'uploads');
+      if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+      let samplePath = '';
+      const existing = fs.readdirSync(uploadsDir).filter((f) => f.endsWith('.pdf') || f.endsWith('.jpeg') || f.endsWith('.jpg'));
+      if (existing.length > 0) {
+        const preferred = existing.find((f) => f.endsWith('.pdf')) || existing[0];
+        samplePath = path.join(uploadsDir, preferred);
+      } else {
+        samplePath = path.join(uploadsDir, `test_sample_${Date.now()}.txt`);
+        fs.writeFileSync(
+          samplePath,
+          `========================================================\n` +
+          `IMPREVO SMART KIOSK TEST ORDER: ${newId}\n` +
+          `File: ${fileName}\n` +
+          `Pages: ${pages}\n` +
+          `Timestamp: ${new Date().toLocaleString()}\n` +
+          `========================================================\n`,
+          'utf8'
+        );
+      }
+
+      if (samplePath && fs.existsSync(samplePath)) {
+        const stats = fs.statSync(samplePath);
+        const mime = samplePath.endsWith('.pdf') ? 'application/pdf' : samplePath.endsWith('.txt') ? 'text/plain' : 'image/jpeg';
+        await pool.query(
+          `INSERT INTO documents (order_id, original_name, stored_name, file_path, file_size_bytes, mime_type, page_count)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [newId, fileName, path.basename(samplePath), samplePath, stats.size, mime, pages]
+        );
+      }
+    } catch (docErr) {
+      console.warn('Could not link physical document to test order:', docErr);
+    }
+
     await pool.query(
       `
       INSERT INTO payments (id, order_id, razorpay_order_id, razorpay_payment_id, amount, currency, method, status)
@@ -453,6 +492,9 @@ router.post('/test/create-order', async (req: Request, res: Response) => {
       `,
       [`New Order ${newId} Received`, `₹${totalPrice}.00 • ${fileName} (${pages} pgs)`]
     );
+
+    // Trigger immediate background worker tick
+    processPrintQueueTick().catch((err) => console.warn('Error during print queue tick for test order:', err));
 
     res.json({
       success: true,
