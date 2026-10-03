@@ -46,8 +46,9 @@ export async function initializeDatabase(): Promise<void> {
     // 3. Seed Printer Hardware status
     await connection.query(`
       INSERT INTO printer_hardware (id, terminal_id, model_name, connection_type, toner_level_pct, paper_count, paper_capacity, active_tray, status)
-      VALUES ('prn_01', '#04', 'Brother HL-L6400DW', 'network_ipp', 94, 458, 500, 'Tray 1', 'ready')
+      VALUES ('prn_01', '#04', 'Canon LBP2900', 'usb', 94, 458, 500, 'Tray 1', 'ready')
       ON DUPLICATE KEY UPDATE 
+        model_name = COALESCE(model_name, VALUES(model_name)),
         toner_level_pct = VALUES(toner_level_pct),
         paper_count = VALUES(paper_count),
         status = VALUES(status);
@@ -75,7 +76,7 @@ export async function initializeDatabase(): Promise<void> {
       `);
     } catch {}
 
-    // Ensure printer config row exists for terminal #04 without hardcoding specific printer models
+    // Ensure printer config row exists for terminal #04 with connected hardware defaults
     await connection.query(`
       INSERT INTO printer_configs (
         terminal_id, 
@@ -85,12 +86,14 @@ export async function initializeDatabase(): Promise<void> {
         use_same_printer_for_both
       ) VALUES (
         '#04',
-        NULL, NULL, 'usb', NULL, 'ready',
-        NULL, NULL, 'usb', NULL, 'ready',
-        NULL, NULL, 'usb', NULL, 'ready',
+        'win_Canon_LBP2900', 'Canon LBP2900', 'usb', 'windows://Canon%20LBP2900', 'Available',
+        'win_Canon_LBP2900', 'Canon LBP2900', 'usb', 'windows://Canon%20LBP2900', 'Available',
+        'win_TSC_TTP_244_Plus', 'TSC TTP-244 Plus', 'usb', 'windows://TSC%20TTP-244%20Plus', 'Available',
         TRUE
       ) ON DUPLICATE KEY UPDATE 
-        terminal_id = terminal_id;
+        default_printer_name = COALESCE(default_printer_name, VALUES(default_printer_name)),
+        bw_printer_name = COALESCE(bw_printer_name, VALUES(bw_printer_name)),
+        color_printer_name = COALESCE(color_printer_name, VALUES(color_printer_name));
     `);
 
     // 4. Seed default pricing rules

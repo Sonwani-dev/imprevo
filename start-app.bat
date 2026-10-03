@@ -12,5 +12,7 @@ if errorlevel 1 (
 )
 
 echo Starting Imprevo Backend and Frontend...
+echo Opening Local Kiosk Dashboard at http://localhost:5001/dashboard...
+start "" "http://localhost:5001/dashboard"
 npm run dev:all
 pause

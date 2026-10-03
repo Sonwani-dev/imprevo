@@ -82,6 +82,19 @@ export const DashboardPage: React.FC = () => {
   const [scanError, setScanError] = useState<string | null>(null);
   const [missingPrinterWarning, setMissingPrinterWarning] = useState<string | null>(null);
 
+  // Manual / Custom Printer Form State
+  const [showAddPrinterModal, setShowAddPrinterModal] = useState<boolean>(false);
+  const [newPrinterName, setNewPrinterName] = useState<string>('');
+  const [newPrinterConn, setNewPrinterConn] = useState<'usb' | 'network'>('usb');
+  const [newPrinterIsColor, setNewPrinterIsColor] = useState<boolean>(false);
+  const [isCloudHost] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const h = window.location.hostname;
+      return h !== 'localhost' && h !== '127.0.0.1';
+    }
+    return false;
+  });
+
   // Live Database States
   const [shop, setShop] = useState({
     shop_name: 'Imprevo Print Hub',
@@ -344,6 +357,44 @@ export const DashboardPage: React.FC = () => {
     } finally {
       setIsSavingPrinters(false);
     }
+  };
+
+  const handleAddCustomPrinter = () => {
+    const trimmed = newPrinterName.trim();
+    if (!trimmed) {
+      showToast('⚠️ Please enter a printer model name');
+      return;
+    }
+    const safeId = `custom_${trimmed.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+    const newPrn: SystemPrinterItem = {
+      id: safeId,
+      name: trimmed,
+      displayName: trimmed,
+      identifier: trimmed,
+      status: 'Available',
+      isDefault: systemPrinters.length === 0,
+      connectionType: newPrinterConn,
+      isRealSystemPrinter: true,
+      recommendedFor: newPrinterIsColor ? 'color' : 'bw',
+      colorSupport: newPrinterIsColor,
+      description: `Hardware Printer (${newPrinterConn.toUpperCase()}) • Configured by shopkeeper`,
+      portName: newPrinterConn === 'usb' ? 'USB002' : 'IP_192.168.1.100',
+    };
+
+    setSystemPrinters((prev) => {
+      const exists = prev.some((p) => p.name.toLowerCase() === trimmed.toLowerCase());
+      if (exists) return prev;
+      return [newPrn, ...prev];
+    });
+
+    if (!selectedDefaultPrinterId) setSelectedDefaultPrinterId(safeId);
+    if (!selectedBwPrinterId && !newPrinterIsColor) setSelectedBwPrinterId(safeId);
+    if (!selectedColorPrinterId && newPrinterIsColor) setSelectedColorPrinterId(safeId);
+    setMissingPrinterWarning(null);
+
+    setNewPrinterName('');
+    setShowAddPrinterModal(false);
+    showToast(`✓ Added printer "${trimmed}"`);
   };
 
   const handleTestPrint = async (targetIdOrType: string, specificPrinter?: SystemPrinterItem) => {
@@ -1298,16 +1349,91 @@ export const DashboardPage: React.FC = () => {
             {/* LIST OF DETECTED SYSTEM PRINTERS */}
             <div className="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-high overflow-hidden flex flex-col">
               <div className="p-4 sm:p-5 border-b border-surface-container-high flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold text-base text-on-surface">Detected System Printers</span>
                   <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary font-bold text-xs">
                     {systemPrinters.length} Detected
                   </span>
+                  {isCloudHost && (
+                    <span className="px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 font-semibold text-[11px] flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[13px]">cloud_done</span>
+                      <span>Cloud Hub Sync</span>
+                    </span>
+                  )}
                 </div>
-                <span className="text-xs text-on-surface-variant">
-                  Select a printer to assign as Default, B&W, or Color printer
-                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddPrinterModal((v) => !v)}
+                    className="px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-xs font-semibold text-on-surface border border-surface-container-high cursor-pointer transition-colors flex items-center gap-1.5 shadow-xs"
+                  >
+                    <span className="material-symbols-outlined text-[16px] text-primary">add_circle</span>
+                    <span>{showAddPrinterModal ? 'Close Form' : '+ Add Printer'}</span>
+                  </button>
+                  <span className="text-xs text-on-surface-variant hidden md:inline">
+                    Select a printer to assign as Default, B&W, or Color
+                  </span>
+                </div>
               </div>
+
+              {showAddPrinterModal && (
+                <div className="p-4 bg-primary/5 border-b border-surface-container-high flex flex-col sm:flex-row items-center gap-3 animate-in fade-in">
+                  <div className="flex-1 w-full">
+                    <label className="block text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">
+                      Printer Model Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Canon LBP2900, TSC TTP-244 Plus, HP LaserJet..."
+                      value={newPrinterName}
+                      onChange={(e) => setNewPrinterName(e.target.value)}
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-surface-container-high bg-surface-container-lowest text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                  </div>
+                  <div className="w-full sm:w-36">
+                    <label className="block text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">
+                      Connection
+                    </label>
+                    <select
+                      value={newPrinterConn}
+                      onChange={(e: any) => setNewPrinterConn(e.target.value)}
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-surface-container-high bg-surface-container-lowest text-on-surface focus:outline-none"
+                    >
+                      <option value="usb">USB Direct</option>
+                      <option value="network">Network IPP</option>
+                    </select>
+                  </div>
+                  <div className="w-full sm:w-32">
+                    <label className="block text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">
+                      Output Type
+                    </label>
+                    <select
+                      value={newPrinterIsColor ? 'color' : 'bw'}
+                      onChange={(e) => setNewPrinterIsColor(e.target.value === 'color')}
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-surface-container-high bg-surface-container-lowest text-on-surface focus:outline-none"
+                    >
+                      <option value="bw">B&W Laser</option>
+                      <option value="color">Color</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2 w-full sm:w-auto pt-4 sm:pt-4">
+                    <button
+                      type="button"
+                      onClick={handleAddCustomPrinter}
+                      className="flex-1 sm:flex-initial px-4 py-2 bg-primary text-on-primary rounded-lg text-xs font-bold hover:shadow-xs transition-all cursor-pointer"
+                    >
+                      Add Printer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddPrinterModal(false)}
+                      className="px-3 py-2 bg-surface-container text-on-surface-variant rounded-lg text-xs font-semibold hover:bg-surface-container-high cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="divide-y divide-surface-container-high">
                 {systemPrinters.length === 0 ? (
@@ -1327,15 +1453,25 @@ export const DashboardPage: React.FC = () => {
                         <div>3. Make sure the printer driver is installed in Windows/CUPS settings.</div>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      disabled={isScanningPrinters}
-                      onClick={() => scanSystemPrinters(true)}
-                      className="px-4 py-2 rounded-xl bg-primary text-on-primary font-bold text-xs flex items-center gap-2 cursor-pointer shadow-sm hover:shadow-md transition-all disabled:opacity-50"
-                    >
-                      <span className={`material-symbols-outlined text-[18px] ${isScanningPrinters ? 'animate-spin' : ''}`}>refresh</span>
-                      <span>{isScanningPrinters ? 'Scanning...' : 'Scan Printers Again'}</span>
-                    </button>
+                    <div className="flex items-center gap-2 flex-wrap justify-center">
+                      <button
+                        type="button"
+                        disabled={isScanningPrinters}
+                        onClick={() => scanSystemPrinters(true)}
+                        className="px-4 py-2 rounded-xl bg-primary text-on-primary font-bold text-xs flex items-center gap-2 cursor-pointer shadow-sm hover:shadow-md transition-all disabled:opacity-50"
+                      >
+                        <span className={`material-symbols-outlined text-[18px] ${isScanningPrinters ? 'animate-spin' : ''}`}>refresh</span>
+                        <span>{isScanningPrinters ? 'Scanning...' : 'Scan Printers Again'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddPrinterModal(true)}
+                        className="px-4 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface border border-surface-container-high font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
+                      >
+                        <span className="material-symbols-outlined text-[18px] text-primary">add_circle</span>
+                        <span>Add Printer Manually</span>
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   systemPrinters.map((printer) => {
