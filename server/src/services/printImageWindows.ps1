@@ -41,8 +41,16 @@ if ($Orientation -eq 'landscape') {
 
 # Auto-match A4 paper if supported
 foreach ($ps in $doc.PrinterSettings.PaperSizes) {
-    if ($ps.PaperName -match 'A4') {
+    if ($ps.PaperName -match 'A4' -or $ps.RawKind -eq 9) {
         $doc.DefaultPageSettings.PaperSize = $ps
+        break
+    }
+}
+
+# Auto-match main tray or multi-purpose tray to avoid Manual Feed pause on laser printers
+foreach ($src in $doc.PrinterSettings.PaperSources) {
+    if ($src.SourceName -match 'Tray|Auto|Multi' -or $src.RawKind -eq 4 -or $src.RawKind -eq 7) {
+        $doc.DefaultPageSettings.PaperSource = $src
         break
     }
 }

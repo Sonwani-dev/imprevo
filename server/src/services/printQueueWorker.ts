@@ -355,17 +355,43 @@ export async function processPrintQueueTick(): Promise<void> {
               printOptions.monochrome = true;
             }
 
-            try {
+            let printedSuccessfully = false;
+
+            // 1. Try native 64-bit headless Edge engine (present on all modern Windows 10/11)
+            const edgePath = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
+            if (fs.existsSync(edgePath)) {
+              try {
+                const safePath = targetFilePath.replace(/"/g, '\\"');
+                const safePrinter = selectedPrinter.replace(/"/g, '\\"');
+                const edgeCmd = `"${edgePath}" --headless --disable-gpu --print-to-printer="${safePrinter}" "${safePath}"`;
+                await execAsync(edgeCmd, { timeout: 25000 });
+                console.log(`[PrintWorker] ✓ Physical PDF dispatched via native 64-bit Edge print engine to "${selectedPrinter}"!`);
+                printedSuccessfully = true;
+              } catch (edgeErr: any) {
+                console.warn(`[PrintWorker] Edge print notice: ${edgeErr.message || edgeErr}`);
+              }
+            }
+
+            // 2. Try Windows Shell PrintTo if not printed yet
+            if (!printedSuccessfully) {
+              try {
+                const safePath = targetFilePath.replace(/'/g, "''");
+                const safePrinter = selectedPrinter.replace(/'/g, "''");
+                await execAsync(
+                  `powershell -Command "Start-Process -FilePath '${safePath}' -Verb PrintTo -ArgumentList '\"${safePrinter}\"' -PassThru | Out-Null"`,
+                  { timeout: 15000 }
+                );
+                console.log(`[PrintWorker] ✓ Physical PDF dispatched via Windows Shell PrintTo to "${selectedPrinter}"!`);
+                printedSuccessfully = true;
+              } catch (shellErr: any) {
+                console.warn(`[PrintWorker] Shell PrintTo notice: ${shellErr.message || shellErr}`);
+              }
+            }
+
+            // 3. Fallback to pdf-to-printer
+            if (!printedSuccessfully) {
               await ptp.print(targetFilePath, printOptions);
               console.log(`[PrintWorker] ✓ Physical PDF print job sent to Windows printer "${selectedPrinter}"!`);
-            } catch (ptpErr: any) {
-              console.warn(`[PrintWorker] pdf-to-printer notice (${ptpErr.message}), attempting Windows Shell fallback...`);
-              const safePath = targetFilePath.replace(/'/g, "''");
-              const safePrinter = selectedPrinter.replace(/'/g, "''");
-              await execAsync(
-                `powershell -Command "Start-Process -FilePath '${safePath}' -Verb PrintTo -ArgumentList '\"${safePrinter}\"' -PassThru | Out-Null"`
-              );
-              console.log(`[PrintWorker] ✓ Physical PDF dispatched via Windows Shell PrintTo to "${selectedPrinter}"!`);
             }
           } else if (ext === '.txt') {
             // ONLY pure text files are allowed to use Out-Printer

@@ -6,6 +6,26 @@ param(
 
 Add-Type -AssemblyName System.Drawing
 
+# 1. Try Windows Native Certified Hardware Driver Test Page
+try {
+    $wmiPrinter = Get-CimInstance Win32_Printer | Where-Object { 
+        $_.Name -eq $PrinterName -or 
+        $_.Name.ToLower() -eq $PrinterName.ToLower() -or
+        $_.Name.ToLower().Contains($PrinterName.ToLower()) -or
+        $PrinterName.ToLower().Contains($_.Name.ToLower())
+    } | Select-Object -First 1
+
+    if ($wmiPrinter) {
+        $result = Invoke-CimMethod -InputObject $wmiPrinter -MethodName "PrintTestPage" -ErrorAction SilentlyContinue
+        if ($result -and $result.ReturnValue -eq 0) {
+            Write-Output "Native hardware test page sent successfully to $($wmiPrinter.Name)"
+            exit 0
+        }
+    }
+} catch {
+    # Fall back to GDI PrintDocument below
+}
+
 # Validate printer exists in Windows Spooler
 $printers = [System.Drawing.Printing.PrinterSettings]::InstalledPrinters
 $matched = $null
@@ -38,8 +58,16 @@ if (-not $doc.PrinterSettings.IsValid) {
 
 # Auto-match A4 paper if supported, otherwise standard default
 foreach ($ps in $doc.PrinterSettings.PaperSizes) {
-    if ($ps.PaperName -match 'A4') {
+    if ($ps.PaperName -match 'A4' -or $ps.RawKind -eq 9) {
         $doc.DefaultPageSettings.PaperSize = $ps
+        break
+    }
+}
+
+# Auto-match main tray or multi-purpose tray to avoid Manual Feed pause on laser printers
+foreach ($src in $doc.PrinterSettings.PaperSources) {
+    if ($src.SourceName -match 'Tray|Auto|Multi' -or $src.RawKind -eq 4 -or $src.RawKind -eq 7) {
+        $doc.DefaultPageSettings.PaperSource = $src
         break
     }
 }
